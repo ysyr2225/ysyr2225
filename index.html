@@ -92,6 +92,25 @@
   select:focus, input:focus{outline:2px solid var(--orange); outline-offset:1px; border-color:var(--orange);}
   select:disabled{color:#a9a190; background:#efeadd;}
 
+  .floor-chips{
+    display:grid; grid-template-columns:repeat(5, 1fr); gap:6px;
+    user-select:none; -webkit-user-select:none; touch-action:none;
+  }
+  .floor-chip{
+    padding:9px 4px; text-align:center; border-radius:6px; border:1.5px solid #d8d2bf;
+    background:#fffdf8; font-family:'Roboto Mono',monospace; font-size:12.5px; font-weight:600;
+    color:var(--ink-dim); cursor:pointer; transition:background .1s ease, color .1s ease, border-color .1s ease;
+  }
+  .floor-chip.selected{
+    background:var(--teal); border-color:var(--teal); color:#fff;
+  }
+  .floor-chip.na{
+    color:#c7bfa8; background:#efeadd; cursor:not-allowed;
+  }
+  .floor-chip-summary{
+    margin-top:8px; font-family:'Roboto Mono',monospace; font-size:11.5px; color:var(--ink-dim);
+  }
+
   /* segmented control for 구분 */
   .seg{
     display:grid; grid-template-columns:1fr 1fr; gap:8px;
@@ -288,7 +307,7 @@
         <label for="f-dong">동</label>
         <select id="f-dong"></select>
       </div>
-      <div class="field">
+      <div class="field" id="floor-select-field">
         <label for="f-floor">층</label>
         <select id="f-floor"></select>
       </div>
@@ -297,6 +316,11 @@
     <div class="field" id="sheet-field" style="display:none;">
       <label for="f-sheet">해체 항목 (시트별 개별 계산)</label>
       <select id="f-sheet"></select>
+    </div>
+
+    <div class="field" id="floor-chips-field" style="display:none;">
+      <label>층 선택 <span style="text-transform:none;font-weight:500;color:var(--ink-dim);">· 드래그해서 여러 층 한번에 선택</span></label>
+      <div class="floor-chips" id="floor-chips"></div>
     </div>
 
     <div class="breakdown" id="breakdown"></div>
@@ -313,6 +337,7 @@
       </div>
     </div>
     <div id="month-summary" class="month-summary" style="display:none;"></div>
+    <div id="item-summary" class="month-summary" style="display:none;"></div>
     <div id="log-list">
       <div class="empty-state">아직 추가된 작업이 없습니다.</div>
     </div>
@@ -379,9 +404,13 @@ const exportBtn = document.getElementById('export-btn');
 const typeSeg = document.getElementById('type-seg');
 const sheetField = document.getElementById('sheet-field');
 const sheetSel = document.getElementById('f-sheet');
+const floorSelectField = document.getElementById('floor-select-field');
+const floorChipsField = document.getElementById('floor-chips-field');
+const floorChipsEl = document.getElementById('floor-chips');
 
 let currentType = 'install';
 let priceManuallyEdited = false;
+let selectedFloors = new Set();
 
 function populateSheetOptions(){
   sheetSel.innerHTML = sheetKeys.map(k => `<option value="${k}">${shortTitle(k)}</option>`).join('');
@@ -433,20 +462,42 @@ function updatePriceNote(){
 }
 
 function currentItems(){
-  const dong = dongSel.value, floor = floorSel.value;
-  // 해체는 시트(항목)별로 개별 계산 - 선택된 항목 1개만
+  const dong = dongSel.value;
+  // 해체: 시트(항목) 1개 + 선택된 층(들) 각각
   if(currentType === 'dismantle'){
     const k = sheetSel.value;
     const dongData = DATA[k].grid[dong] || {};
-    const v = dongData[floor];
-    return [{ key: k, title: shortTitle(k), area: (typeof v === 'number') ? v : null }];
+    const floors = Array.from(selectedFloors).sort((a,b)=>Number(b)-Number(a));
+    return floors.map(floor => {
+      const v = dongData[floor];
+      return { key: k, title: shortTitle(k), floor, area: (typeof v === 'number') ? v : null };
+    });
   }
-  // 설치는 5개 항목 전체 합산
+  // 설치: 5개 항목 전체 합산 (층 1개)
+  const floor = floorSel.value;
   return sheetKeys.map(k => {
     const dongData = DATA[k].grid[dong] || {};
     const v = dongData[floor];
-    return { key: k, title: shortTitle(k), area: (typeof v === 'number') ? v : null };
+    return { key: k, title: shortTitle(k), floor, area: (typeof v === 'number') ? v : null };
   });
+}
+
+function populateFloorChips(){
+  const dong = dongSel.value;
+  const k = sheetSel.value;
+  const dongData = (DATA[k] && DATA[k].grid[dong]) || {};
+  const floors = Object.keys(dongData).sort((a,b)=>Number(b)-Number(a));
+  // 선택된 층 중 이제 유효하지 않은 것 제거
+  selectedFloors = new Set(Array.from(selectedFloors).filter(f => floors.includes(f)));
+
+  if(floors.length === 0){
+    floorChipsEl.innerHTML = `<div style="grid-column:1/-1;color:rgba(255,255,255,0.3);font-size:12px;padding:4px 0;">이 동에는 데이터가 없습니다</div>`;
+    return;
+  }
+  floorChipsEl.innerHTML = floors.map(f => {
+    const sel = selectedFloors.has(f) ? ' selected' : '';
+    return `<div class="floor-chip${sel}" data-floor="${f}">${f}F</div>`;
+  }).join('');
 }
 
 function updateBreakdown(){
@@ -454,20 +505,37 @@ function updateBreakdown(){
   const price = Number(priceInput.value) || 0;
   const valid = items.filter(it => it.area !== null);
 
-  breakdown.innerHTML = items.map(it => {
-    if(it.area === null){
-      return `<div class="b-row na"><span class="name">${it.title}</span><span class="amt">데이터 없음</span></div>`;
+  if(currentType === 'dismantle'){
+    if(items.length === 0){
+      breakdown.innerHTML = `<div class="b-row na"><span class="name">층을 선택하세요</span></div>`;
+    } else {
+      breakdown.innerHTML = items.map(it => {
+        if(it.area === null){
+          return `<div class="b-row na"><span class="name">${it.floor}층</span><span class="amt">데이터 없음</span></div>`;
+        }
+        return `<div class="b-row">
+          <span class="name">${it.floor}층</span>
+          <span class="area">${fmt(it.area)}m²</span>
+          <span class="amt">${fmtWon(it.area * price)}</span>
+        </div>`;
+      }).join('') + `<div class="b-total"><span class="label">합계</span><span class="amt">${fmtWon(valid.reduce((s,it)=>s+it.area*price,0))}</span></div>`;
     }
-    return `<div class="b-row">
-      <span class="name">${it.title}</span>
-      <span class="area">${fmt(it.area)}m²</span>
-      <span class="amt">${fmtWon(it.area * price)}</span>
-    </div>`;
-  }).join('') + `<div class="b-total"><span class="label">합계</span><span class="amt">${fmtWon(valid.reduce((s,it)=>s+it.area*price,0))}</span></div>`;
+  } else {
+    breakdown.innerHTML = items.map(it => {
+      if(it.area === null){
+        return `<div class="b-row na"><span class="name">${it.title}</span><span class="amt">데이터 없음</span></div>`;
+      }
+      return `<div class="b-row">
+        <span class="name">${it.title}</span>
+        <span class="area">${fmt(it.area)}m²</span>
+        <span class="amt">${fmtWon(it.area * price)}</span>
+      </div>`;
+    }).join('') + `<div class="b-total"><span class="label">합계</span><span class="amt">${fmtWon(valid.reduce((s,it)=>s+it.area*price,0))}</span></div>`;
+  }
 
   addBtn.disabled = valid.length === 0;
   addBtn.classList.toggle('dismantle', currentType === 'dismantle');
-  addBtn.textContent = (currentType === 'dismantle' ? '+ 이 항목 해체비 정산 목록에 추가' : '+ 이 동·층 전체 항목 정산 목록에 추가');
+  addBtn.textContent = (currentType === 'dismantle' ? '+ 선택한 층 해체비 정산 목록에 추가' : '+ 이 동·층 전체 항목 정산 목록에 추가');
 }
 
 typeSeg.addEventListener('click', (ev) => {
@@ -475,15 +543,23 @@ typeSeg.addEventListener('click', (ev) => {
   if(!btn) return;
   currentType = btn.dataset.type;
   [...typeSeg.querySelectorAll('button')].forEach(b => b.classList.toggle('active', b === btn));
-  sheetField.style.display = (currentType === 'dismantle') ? 'block' : 'none';
+  const isDismantle = currentType === 'dismantle';
+  sheetField.style.display = isDismantle ? 'block' : 'none';
+  floorSelectField.style.display = isDismantle ? 'none' : 'block';
+  floorChipsField.style.display = isDismantle ? 'block' : 'none';
+  if(isDismantle) populateFloorChips();
   applyRulePrice();
   updateBreakdown();
 });
 
-sheetSel.addEventListener('change', updateBreakdown);
+sheetSel.addEventListener('change', () => {
+  if(currentType === 'dismantle') populateFloorChips();
+  updateBreakdown();
+});
 
 dongSel.addEventListener('change', () => {
   populateFloors();
+  if(currentType === 'dismantle') populateFloorChips();
   applyRulePrice();
   updateBreakdown();
 });
@@ -492,6 +568,41 @@ priceInput.addEventListener('input', () => {
   priceManuallyEdited = true;
   updateBreakdown();
 });
+
+// ---- 층 드래그 다중 선택 (해체 모드) ----
+let dragActive = false;
+let dragSelectMode = true; // true = 선택 중, false = 해제 중
+
+function setChipState(chipEl, selected){
+  const f = chipEl.dataset.floor;
+  if(selected){ selectedFloors.add(f); chipEl.classList.add('selected'); }
+  else { selectedFloors.delete(f); chipEl.classList.remove('selected'); }
+}
+
+floorChipsEl.addEventListener('pointerdown', (ev) => {
+  const chip = ev.target.closest('.floor-chip');
+  if(!chip || !chip.dataset.floor) return;
+  ev.preventDefault();
+  dragActive = true;
+  dragSelectMode = !chip.classList.contains('selected');
+  setChipState(chip, dragSelectMode);
+  updateBreakdown();
+});
+
+document.addEventListener('pointermove', (ev) => {
+  if(!dragActive) return;
+  const el = document.elementFromPoint(ev.clientX, ev.clientY);
+  const chip = el && el.closest ? el.closest('.floor-chip') : null;
+  if(chip && chip.dataset.floor && floorChipsEl.contains(chip)){
+    if(chip.classList.contains('selected') !== dragSelectMode){
+      setChipState(chip, dragSelectMode);
+      updateBreakdown();
+    }
+  }
+});
+
+document.addEventListener('pointerup', () => { dragActive = false; });
+document.addEventListener('pointercancel', () => { dragActive = false; });
 
 // ---- storage-backed log (JSONBin.io) ----
 let entries = [];
@@ -564,6 +675,34 @@ function renderMonthSummary(){
   }).join('');
 }
 
+function renderItemSummary(){
+  const summaryEl = document.getElementById('item-summary');
+  if(entries.length === 0){
+    summaryEl.style.display = 'none';
+    summaryEl.innerHTML = '';
+    return;
+  }
+  const groups = {};
+  const order = [];
+  entries.forEach(e => {
+    const key = e.sheetTitle;
+    if(!groups[key]){ groups[key] = { install: 0, dismantle: 0, sum: 0 }; order.push(key); }
+    groups[key][e.type === 'dismantle' ? 'dismantle' : 'install'] += e.amount;
+    groups[key].sum += e.amount;
+  });
+  const grandTotal = entries.reduce((s,e)=>s+e.amount, 0);
+  summaryEl.style.display = 'block';
+  summaryEl.innerHTML =
+    `<div class="m-row" style="border-bottom:1px solid #ddd6c3;padding-bottom:8px;margin-bottom:2px;"><span class="name" style="font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.04em;">항목별 소계</span></div>` +
+    order.map(k => {
+      const g = groups[k];
+      const detail = (g.install > 0 && g.dismantle > 0)
+        ? `<span class="period">(설치 ${fmtWon(g.install)} · 해체 ${fmtWon(g.dismantle)})</span>` : '';
+      return `<div class="m-row"><span class="name">${k} ${detail}</span><span class="amt">${fmtWon(g.sum)}</span></div>`;
+    }).join('') +
+    `<div class="m-row" style="border-top:2px solid var(--orange);margin-top:2px;padding-top:10px;"><span class="name" style="font-size:13.5px;">총합계</span><span class="amt" style="font-size:15px;">${fmtWon(grandTotal)}</span></div>`;
+}
+
 function renderLog(){
   if(entries.length === 0){
     logList.innerHTML = `<div class="empty-state">아직 추가된 작업이 없습니다.</div>`;
@@ -591,6 +730,7 @@ function renderLog(){
   totalValue.textContent = fmtWon(total);
   exportBtn.disabled = entries.length === 0;
   renderMonthSummary();
+  renderItemSummary();
 }
 
 logList.addEventListener('click', (ev) => {
@@ -649,17 +789,22 @@ addBtn.addEventListener('click', () => {
   if(items.length === 0) return;
   const price = Number(priceInput.value) || 0;
   const date = dateInput.value;
-  const dong = dongSel.value, floor = floorSel.value;
+  const dong = dongSel.value;
   const type = currentType;
   items.forEach(it => {
     entries.unshift({
       date, type, sheetKey: it.key, sheetTitle: it.title,
-      dong, floor, area: it.area, price,
+      dong, floor: it.floor, area: it.area, price,
       amount: it.area * price
     });
   });
   renderLog();
   saveEntries();
+  if(type === 'dismantle'){
+    selectedFloors = new Set();
+    populateFloorChips();
+    updateBreakdown();
+  }
 });
 
 // init
