@@ -169,6 +169,7 @@
     <div class="last-sync" id="last-sync">불러오는 중…</div>
 
     <div id="month-summary" class="month-summary" style="display:none;"></div>
+    <div id="item-summary" class="month-summary" style="display:none;"></div>
     <div id="log-list">
       <div class="empty-state"><div class="big">📋</div>아직 등록된 정산 내역이 없습니다.</div>
     </div>
@@ -239,6 +240,30 @@ function renderMonthSummary(){
   }).join('');
 }
 
+function renderItemSummary(){
+  const summaryEl = document.getElementById('item-summary');
+  if(entries.length === 0){ summaryEl.style.display = 'none'; summaryEl.innerHTML=''; return; }
+  const groups = {};
+  const order = [];
+  entries.forEach(e => {
+    const key = e.sheetTitle;
+    if(!groups[key]){ groups[key] = { install: 0, dismantle: 0, sum: 0 }; order.push(key); }
+    groups[key][e.type === 'dismantle' ? 'dismantle' : 'install'] += e.amount;
+    groups[key].sum += e.amount;
+  });
+  const grandTotal = entries.reduce((s,e)=>s+e.amount, 0);
+  summaryEl.style.display = 'block';
+  summaryEl.innerHTML =
+    `<div class="m-row" style="border-bottom:1px solid #ddd6c3;padding-bottom:8px;margin-bottom:2px;"><span class="name" style="font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.04em;">항목별 소계</span></div>` +
+    order.map(k => {
+      const g = groups[k];
+      const detail = (g.install > 0 && g.dismantle > 0)
+        ? `<span class="period">(설치 ${fmtWon(g.install)} · 해체 ${fmtWon(g.dismantle)})</span>` : '';
+      return `<div class="m-row"><span class="name">${k} ${detail}</span><span class="amt">${fmtWon(g.sum)}</span></div>`;
+    }).join('') +
+    `<div class="m-row" style="border-top:2px solid var(--orange);margin-top:2px;padding-top:10px;"><span class="name" style="font-size:13.5px;">총합계</span><span class="amt" style="font-size:15px;">${fmtWon(grandTotal)}</span></div>`;
+}
+
 function renderLog(){
   if(entries.length === 0){
     logList.innerHTML = `<div class="empty-state"><div class="big">📋</div>아직 등록된 정산 내역이 없습니다.</div>`;
@@ -264,6 +289,7 @@ function renderLog(){
   totalValue.textContent = fmtWon(total);
   exportBtn.disabled = entries.length === 0;
   renderMonthSummary();
+  renderItemSummary();
 }
 
 async function loadEntries(showSpin){
