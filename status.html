@@ -178,7 +178,7 @@
     </div>
   </div>
 
-  <div class="foot-note">입력 전용 계산기에서 추가한 내역이 여기 자동으로 표시됩니다 · 10초마다 자동 갱신</div>
+  <div class="foot-note">입력 전용 계산기에서 추가한 내역이 여기 자동으로 표시됩니다 · 매일 자정 자동 갱신 (필요하면 위 새로고침 버튼으로 즉시 확인 가능)</div>
 </div>
 
 <script>
@@ -306,7 +306,17 @@ exportBtn.addEventListener('click', () => {
 });
 
 loadEntries(false);
-setInterval(() => loadEntries(false), 10000);
+// 자동 새로고침: 매일 자정(00:00)에 한 번만
+function scheduleDailyRefresh(){
+  const now = new Date();
+  const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
+  const msUntilMidnight = nextMidnight - now;
+  setTimeout(() => {
+    loadEntries(false);
+    setInterval(() => loadEntries(false), 24 * 60 * 60 * 1000);
+  }, msUntilMidnight);
+}
+scheduleDailyRefresh();
 </script>
 </body>
 </html>
