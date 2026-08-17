@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>대방수원2차 정산 현황판</title>
+<title>대방수원2차 시공 현황판</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -126,6 +126,22 @@
   .empty-state{ text-align:center; padding:36px 10px; color:var(--ink-dim); font-size:13px; }
   .empty-state .big{ font-size:28px; margin-bottom:8px; }
 
+  .group-header{
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:12.5px; color:var(--orange-dim);
+    padding:12px 4px 4px;
+  }
+  .group-header:first-child{padding-top:2px;}
+  .group-subtotal{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:8px 4px 10px; margin-bottom:2px; border-bottom:2px solid #ddd6c3;
+  }
+  .group-subtotal .label{
+    font-family:'Roboto Mono',monospace; font-size:10.5px; color:var(--ink-dim); letter-spacing:.04em;
+  }
+  .group-subtotal .amt{
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:13.5px; color:var(--ink);
+  }
+
   .total-bar{
     margin-top:4px; padding-top:14px; border-top:2px solid var(--ink);
     display:flex; align-items:center; justify-content:space-between;
@@ -153,14 +169,14 @@
   <header>
     <div>
       <div class="brand-eyebrow">대방수원2차 · 안전시설 물량표</div>
-      <h1>정산 현황판</h1>
+      <h1>시공 현황판</h1>
     </div>
     <div class="tag"><span class="dot"></span>읽기 전용</div>
   </header>
 
   <div class="panel">
     <p class="panel-title">
-      <span style="display:flex;align-items:center;gap:8px;"><span class="num">1</span>실시간 정산 목록</span>
+      <span style="display:flex;align-items:center;gap:8px;"><span class="num">1</span>실시간 시공 목록</span>
       <span style="display:flex;gap:8px;">
         <button class="export-btn" id="export-btn">⬇ 엑셀</button>
         <button class="refresh-btn" id="refresh-btn"><span class="ic">↻</span>새로고침</button>
@@ -171,7 +187,7 @@
     <div id="month-summary" class="month-summary" style="display:none;"></div>
     <div id="item-summary" class="month-summary" style="display:none;"></div>
     <div id="log-list">
-      <div class="empty-state"><div class="big">📋</div>아직 등록된 정산 내역이 없습니다.</div>
+      <div class="empty-state"><div class="big">📋</div>아직 등록된 시공 내역이 없습니다.</div>
     </div>
     <div class="total-bar">
       <div class="label">TOTAL</div>
@@ -266,23 +282,36 @@ function renderItemSummary(){
 
 function renderLog(){
   if(entries.length === 0){
-    logList.innerHTML = `<div class="empty-state"><div class="big">📋</div>아직 등록된 정산 내역이 없습니다.</div>`;
+    logList.innerHTML = `<div class="empty-state"><div class="big">📋</div>아직 등록된 시공 내역이 없습니다.</div>`;
   } else {
-    logList.innerHTML = entries.map(e => {
-      const si = settlementInfo(e.date);
-      return `
-      <div class="entry">
-        <div class="info">
-          <div class="line1">
-            <span class="dt">${mdLabel(e.date)}</span>
-            ${si ? `<span class="month-badge">${si.label} 정산</span>` : ''}
-            <span class="type-badge ${e.type === 'dismantle' ? 'dismantle' : ''}">${typeLabel(e.type)}</span>
-            <span>${e.dong}동 ${e.floor}층</span><span>· ${e.sheetTitle}</span>
+    const groups = {};
+    const order = [];
+    entries.forEach(e => {
+      const key = e.sheetTitle;
+      if(!groups[key]){ groups[key] = []; order.push(key); }
+      groups[key].push(e);
+    });
+
+    logList.innerHTML = order.map(title => {
+      const rows = groups[title];
+      const subtotal = rows.reduce((s, e) => s + e.amount, 0);
+      const rowsHtml = rows.map(e => {
+        const si = settlementInfo(e.date);
+        return `
+        <div class="entry">
+          <div class="info">
+            <div class="line1">
+              <span class="dt">${mdLabel(e.date)}</span>
+              ${si ? `<span class="month-badge">${si.label} 시공</span>` : ''}
+              <span class="type-badge ${e.type === 'dismantle' ? 'dismantle' : ''}">${typeLabel(e.type)}</span>
+              <span>${e.dong}동 ${e.floor}층</span>
+            </div>
+            <div class="line2">${fmt(e.area)}m² × ${e.price.toLocaleString('ko-KR')}원</div>
           </div>
-          <div class="line2">${fmt(e.area)}m² × ${e.price.toLocaleString('ko-KR')}원</div>
-        </div>
-        <div class="amt">${fmtWon(e.amount)}</div>
-      </div>`;
+          <div class="amt">${fmtWon(e.amount)}</div>
+        </div>`;
+      }).join('');
+      return `<div class="group-header">${title}</div>${rowsHtml}<div class="group-subtotal"><span class="label">${title} 소계</span><span class="amt">${fmtWon(subtotal)}</span></div>`;
     }).join('');
   }
   const total = entries.reduce((s,e)=>s+e.amount, 0);
@@ -316,19 +345,19 @@ exportBtn.addEventListener('click', () => {
   const rows = entries.map(e => {
     const si = settlementInfo(e.date);
     return {
-      '날짜': e.date || '', '정산월': si ? si.label : '', '구분': typeLabel(e.type),
+      '날짜': e.date || '', '시공월': si ? si.label : '', '구분': typeLabel(e.type),
       '동': e.dong + '동', '층': e.floor + '층', '항목': e.sheetTitle,
       '면적(m²)': Number(e.area.toFixed(2)), '단가(원)': e.price, '금액(원)': Math.round(e.amount)
     };
   });
   const total = entries.reduce((s,e)=>s+e.amount, 0);
-  rows.push({ '날짜':'', '정산월':'', '구분':'', '동':'', '층':'', '항목':'합계', '면적(m²)':'', '단가(원)':'', '금액(원)': Math.round(total) });
+  rows.push({ '날짜':'', '시공월':'', '구분':'', '동':'', '층':'', '항목':'합계', '면적(m²)':'', '단가(원)':'', '금액(원)': Math.round(total) });
   const ws = XLSX.utils.json_to_sheet(rows);
   ws['!cols'] = [ {wch:11}, {wch:8}, {wch:6}, {wch:7}, {wch:7}, {wch:22}, {wch:11}, {wch:10}, {wch:12} ];
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, '정산목록');
+  XLSX.utils.book_append_sheet(wb, ws, '시공목록');
   const today = new Date().toISOString().slice(0,10);
-  XLSX.writeFile(wb, `대방수원2차_정산목록_${today}.xlsx`);
+  XLSX.writeFile(wb, `대방수원2차_시공목록_${today}.xlsx`);
 });
 
 loadEntries(false);
