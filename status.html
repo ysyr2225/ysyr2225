@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>대방수원2차 정산 현황판</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --blue-950:#0c1c30;
+    --blue-900:#122a45;
+    --blue-800:#1a3a5c;
+    --blue-line: rgba(255,255,255,0.09);
+    --paper:#f6f3ea;
+    --paper-dim:#ece7d8;
+    --orange:#e85d1f;
+    --orange-dim:#c94c17;
+    --ink:#16232f;
+    --ink-dim:#5c6b78;
+    --teal:#2d7a7a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh;
+    background: var(--blue-950);
+    font-family:'Inter',sans-serif; color:var(--ink); padding: 20px 14px 60px;
+  }
+  .wrap{max-width:640px;margin:0 auto;}
+
+  header{
+    display:flex; align-items:flex-end; justify-content:space-between;
+    margin-bottom:18px; padding: 4px 4px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.18);
+  }
+  .brand-eyebrow{
+    font-family:'Roboto Mono',monospace; font-size:11px; letter-spacing:.14em;
+    color: rgba(255,255,255,0.55); text-transform:uppercase; margin-bottom:6px;
+  }
+  h1{
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:22px;
+    color:#fdfaf3; margin:0; letter-spacing:-.01em;
+  }
+  .tag{
+    font-family:'Roboto Mono',monospace; font-size:11px; color:var(--orange);
+    background: rgba(232,93,31,0.14); border:1px solid rgba(232,93,31,0.4);
+    padding:4px 9px; border-radius:3px; white-space:nowrap; display:flex; align-items:center; gap:5px;
+  }
+  .tag .dot{width:6px;height:6px;border-radius:50%;background:var(--orange);}
+
+  .panel{
+    background:var(--paper); border-radius:10px;
+    box-shadow: 0 18px 40px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.08) inset;
+    padding:20px 18px; margin-bottom:16px; position:relative;
+  }
+  .panel::before{
+    content:""; position:absolute; left:0; top:16px; bottom:16px; width:3px;
+    background:var(--orange); border-radius:0 3px 3px 0;
+  }
+  .panel-title{
+    font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:14px;
+    color:var(--ink); margin:0 0 14px 2px; display:flex; align-items:center; gap:8px;
+    justify-content:space-between;
+  }
+  .panel-title .num{
+    font-family:'Roboto Mono',monospace; font-size:11px; color:#fff; background:var(--blue-800);
+    width:20px;height:20px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;
+  }
+
+  .refresh-btn{
+    font-family:'Roboto Mono',monospace; font-size:11px; font-weight:600; color:var(--ink-dim);
+    background:var(--paper-dim); border:1px solid #d8d2bf; border-radius:5px; padding:5px 10px;
+    cursor:pointer; display:inline-flex; align-items:center; gap:5px;
+  }
+  .refresh-btn:hover{background:#e2dcc7;}
+  .refresh-btn.spinning .ic{animation: spin 0.6s linear;}
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  .last-sync{
+    font-family:'Roboto Mono',monospace; font-size:10.5px; color:var(--ink-dim);
+    text-align:right; margin: -8px 2px 12px;
+  }
+
+  .month-summary{
+    margin-bottom:14px; background:var(--paper-dim); border-radius:8px; padding:4px 12px;
+  }
+  .m-row{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:8px 0; border-bottom:1px solid #ddd6c3;
+  }
+  .m-row:last-child{border-bottom:none;}
+  .m-row .name{
+    font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:13px; color:var(--ink);
+    display:flex; align-items:center; gap:6px;
+  }
+  .m-row .name .period{ font-family:'Roboto Mono',monospace; font-weight:500; font-size:10.5px; color:var(--ink-dim); }
+  .m-row .amt{ font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14px; color:var(--orange-dim); }
+
+  .entry{
+    display:flex; align-items:center; gap:10px; padding:11px 4px;
+    border-bottom:1px dashed #d8d2bf;
+  }
+  .entry:last-child{border-bottom:none;}
+  .entry .info{flex:1; min-width:0;}
+  .entry .line1{
+    font-family:'Roboto Mono',monospace; font-size:11.5px; color:var(--ink-dim);
+    display:flex; gap:6px; flex-wrap:wrap; margin-bottom:2px; align-items:center;
+  }
+  .entry .line1 .dt{color:var(--orange-dim); font-weight:600;}
+  .entry .line1 .month-badge{
+    font-size:9.5px; padding:1px 6px; border-radius:8px; font-weight:600;
+    background:var(--blue-800); color:#fff;
+  }
+  .entry .line1 .type-badge{
+    font-size:9.5px; padding:1px 6px; border-radius:8px; font-weight:600;
+    background:rgba(232,93,31,0.14); color:var(--orange-dim);
+  }
+  .entry .line1 .type-badge.dismantle{background:rgba(45,122,122,0.16); color:var(--teal);}
+  .entry .line2{font-size:13.5px; font-weight:600; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .entry .amt{
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:15px; color:var(--ink);
+    white-space:nowrap;
+  }
+
+  .empty-state{ text-align:center; padding:36px 10px; color:var(--ink-dim); font-size:13px; }
+  .empty-state .big{ font-size:28px; margin-bottom:8px; }
+
+  .total-bar{
+    margin-top:4px; padding-top:14px; border-top:2px solid var(--ink);
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .total-bar .label{font-family:'Roboto Mono',monospace; font-size:12px; color:var(--ink-dim); letter-spacing:.05em;}
+  .total-bar .value{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:22px; color:var(--orange-dim);}
+
+  .export-btn{
+    font-family:'Roboto Mono',monospace; font-size:11px; font-weight:600; color:#fff;
+    background:var(--blue-800); border:none; border-radius:4px; padding:5px 10px;
+    cursor:pointer; display:inline-flex; align-items:center; gap:5px;
+  }
+  .export-btn:hover{background:var(--blue-900);}
+  .export-btn:disabled{background:#c9c2ae; cursor:not-allowed;}
+
+  .foot-note{
+    text-align:center; font-size:11px; color:rgba(255,255,255,0.35); margin-top:18px;
+    font-family:'Roboto Mono',monospace;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <div class="brand-eyebrow">대방수원2차 · 안전시설 물량표</div>
+      <h1>정산 현황판</h1>
+    </div>
+    <div class="tag"><span class="dot"></span>읽기 전용</div>
+  </header>
+
+  <div class="panel">
+    <p class="panel-title">
+      <span style="display:flex;align-items:center;gap:8px;"><span class="num">1</span>실시간 정산 목록</span>
+      <span style="display:flex;gap:8px;">
+        <button class="export-btn" id="export-btn">⬇ 엑셀</button>
+        <button class="refresh-btn" id="refresh-btn"><span class="ic">↻</span>새로고침</button>
+      </span>
+    </p>
+    <div class="last-sync" id="last-sync">불러오는 중…</div>
+
+    <div id="month-summary" class="month-summary" style="display:none;"></div>
+    <div id="log-list">
+      <div class="empty-state"><div class="big">📋</div>아직 등록된 정산 내역이 없습니다.</div>
+    </div>
+    <div class="total-bar">
+      <div class="label">TOTAL</div>
+      <div class="value" id="total-value">0원</div>
+    </div>
+  </div>
+
+  <div class="foot-note">입력 전용 계산기에서 추가한 내역이 여기 자동으로 표시됩니다 · 10초마다 자동 갱신</div>
+</div>
+
+<script>
+const JSONBIN_BIN_ID = '6a81c64eda38895dfeeb85fd';
+const JSONBIN_API_KEY = '$2a$10$qyZUUO.S8EXC9KuX2iE1QutrHwoBmtfockunTzmY4ZsHTN2VvMTue';
+const JSONBIN_BASE = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
+let entries = [];
+
+const logList = document.getElementById('log-list');
+const totalValue = document.getElementById('total-value');
+const refreshBtn = document.getElementById('refresh-btn');
+const exportBtn = document.getElementById('export-btn');
+const lastSync = document.getElementById('last-sync');
+
+function fmt(n){ return n.toLocaleString('ko-KR', {maximumFractionDigits: 2}); }
+function fmtWon(n){ return Math.round(n).toLocaleString('ko-KR') + '원'; }
+function typeLabel(t){ return t === 'dismantle' ? '해체' : '설치'; }
+
+function mdLabel(dateStr){
+  if(!dateStr) return '날짜 미기재';
+  const parts = dateStr.split('-');
+  if(parts.length === 3) return `${Number(parts[1])}/${Number(parts[2])}`;
+  return dateStr;
+}
+
+function settlementInfo(dateStr){
+  if(!dateStr) return null;
+  const d = new Date(dateStr + 'T00:00:00');
+  let y = d.getFullYear();
+  let m = d.getMonth() + 1;
+  const day = d.getDate();
+  if(day >= 21){
+    m += 1;
+    if(m > 12){ m = 1; y += 1; }
+  }
+  const key = `${y}-${String(m).padStart(2,'0')}`;
+  const prevM = m === 1 ? 12 : m - 1;
+  const period = `${prevM}/21~${m}/20`;
+  return { key, label: `${m}월`, period };
+}
+
+function renderMonthSummary(){
+  const summaryEl = document.getElementById('month-summary');
+  if(entries.length === 0){ summaryEl.style.display = 'none'; summaryEl.innerHTML=''; return; }
+  const groups = {};
+  entries.forEach(e => {
+    const si = settlementInfo(e.date);
+    const key = si ? si.key : '__nodate__';
+    if(!groups[key]) groups[key] = { label: si ? si.label : '날짜 미기재', period: si ? si.period : '', sum: 0 };
+    groups[key].sum += e.amount;
+  });
+  const keys = Object.keys(groups).sort();
+  if(keys.length <= 1){ summaryEl.style.display = 'none'; summaryEl.innerHTML=''; return; }
+  summaryEl.style.display = 'block';
+  summaryEl.innerHTML = keys.map(k => {
+    const g = groups[k];
+    return `<div class="m-row"><span class="name">${g.label}${g.period ? `<span class="period">(${g.period})</span>` : ''}</span><span class="amt">${fmtWon(g.sum)}</span></div>`;
+  }).join('');
+}
+
+function renderLog(){
+  if(entries.length === 0){
+    logList.innerHTML = `<div class="empty-state"><div class="big">📋</div>아직 등록된 정산 내역이 없습니다.</div>`;
+  } else {
+    logList.innerHTML = entries.map(e => {
+      const si = settlementInfo(e.date);
+      return `
+      <div class="entry">
+        <div class="info">
+          <div class="line1">
+            <span class="dt">${mdLabel(e.date)}</span>
+            ${si ? `<span class="month-badge">${si.label} 정산</span>` : ''}
+            <span class="type-badge ${e.type === 'dismantle' ? 'dismantle' : ''}">${typeLabel(e.type)}</span>
+            <span>${e.dong}동 ${e.floor}층</span><span>· ${e.sheetTitle}</span>
+          </div>
+          <div class="line2">${fmt(e.area)}m² × ${e.price.toLocaleString('ko-KR')}원</div>
+        </div>
+        <div class="amt">${fmtWon(e.amount)}</div>
+      </div>`;
+    }).join('');
+  }
+  const total = entries.reduce((s,e)=>s+e.amount, 0);
+  totalValue.textContent = fmtWon(total);
+  exportBtn.disabled = entries.length === 0;
+  renderMonthSummary();
+}
+
+async function loadEntries(showSpin){
+  if(showSpin) refreshBtn.classList.add('spinning');
+  try{
+    const res = await fetch(`${JSONBIN_BASE}/latest`, {
+      headers: { 'X-Master-Key': JSONBIN_API_KEY }
+    });
+    const data = await res.json();
+    entries = (data && data.record && Array.isArray(data.record.entries)) ? data.record.entries : [];
+  }catch(e){
+    entries = [];
+  }
+  renderLog();
+  const now = new Date();
+  lastSync.textContent = `마지막 갱신 · ${now.toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit', second:'2-digit'})}`;
+  if(showSpin) setTimeout(() => refreshBtn.classList.remove('spinning'), 400);
+}
+
+refreshBtn.addEventListener('click', () => loadEntries(true));
+
+exportBtn.addEventListener('click', () => {
+  if(entries.length === 0 || typeof XLSX === 'undefined') return;
+  const rows = entries.map(e => {
+    const si = settlementInfo(e.date);
+    return {
+      '날짜': e.date || '', '정산월': si ? si.label : '', '구분': typeLabel(e.type),
+      '동': e.dong + '동', '층': e.floor + '층', '항목': e.sheetTitle,
+      '면적(m²)': Number(e.area.toFixed(2)), '단가(원)': e.price, '금액(원)': Math.round(e.amount)
+    };
+  });
+  const total = entries.reduce((s,e)=>s+e.amount, 0);
+  rows.push({ '날짜':'', '정산월':'', '구분':'', '동':'', '층':'', '항목':'합계', '면적(m²)':'', '단가(원)':'', '금액(원)': Math.round(total) });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [ {wch:11}, {wch:8}, {wch:6}, {wch:7}, {wch:7}, {wch:22}, {wch:11}, {wch:10}, {wch:12} ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '정산목록');
+  const today = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `대방수원2차_정산목록_${today}.xlsx`);
+});
+
+loadEntries(false);
+setInterval(() => loadEntries(false), 10000);
+</script>
+</body>
+</html>
