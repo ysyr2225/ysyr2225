@@ -26,10 +26,7 @@
   body{
     margin:0;
     min-height:100vh;
-    background:
-      linear-gradient(var(--blue-line) 1px, transparent 1px) 0 0/28px 28px,
-      linear-gradient(90deg, var(--blue-line) 1px, transparent 1px) 0 0/28px 28px,
-      radial-gradient(ellipse at top, var(--blue-800), var(--blue-950) 70%);
+    background: var(--blue-950);
     font-family:'Inter',sans-serif;
     color:var(--ink);
     padding: 20px 14px 60px;
@@ -496,14 +493,19 @@ priceInput.addEventListener('input', () => {
   updateBreakdown();
 });
 
-// ---- storage-backed log ----
+// ---- storage-backed log (JSONBin.io) ----
 let entries = [];
-const STORAGE_KEY = 'daebang-suwon-log';
+const JSONBIN_BIN_ID = '6a81c64eda38895dfeeb85fd';
+const JSONBIN_API_KEY = '$2a$10$qyZUUO.S8EXC9KuX2iE1QutrHwoBmtfockunTzmY4ZsHTN2VvMTue';
+const JSONBIN_BASE = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
 
 async function loadEntries(){
   try{
-    const res = await window.storage.get(STORAGE_KEY, true);
-    entries = res && res.value ? JSON.parse(res.value) : [];
+    const res = await fetch(`${JSONBIN_BASE}/latest`, {
+      headers: { 'X-Master-Key': JSONBIN_API_KEY }
+    });
+    const data = await res.json();
+    entries = (data && data.record && Array.isArray(data.record.entries)) ? data.record.entries : [];
   }catch(e){
     entries = [];
   }
@@ -512,7 +514,14 @@ async function loadEntries(){
 
 async function saveEntries(){
   try{
-    await window.storage.set(STORAGE_KEY, JSON.stringify(entries), true);
+    await fetch(JSONBIN_BASE, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': JSONBIN_API_KEY
+      },
+      body: JSON.stringify({ entries })
+    });
   }catch(e){ /* best effort */ }
 }
 
