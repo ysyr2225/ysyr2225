@@ -748,6 +748,26 @@ const JSONBIN_BASE = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
 
 let initialSuggestionApplied = false;
 
+// 전체 시공 목록 중 가장 최근 날짜 다음 영업일(토요일 -> 월요일, 일요일 -> 월요일)로 작업일 기본값 설정
+function nextWorkDate(dateStr){
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + 1);
+  const day = d.getDay(); // 0=일, 6=토
+  if(day === 6) d.setDate(d.getDate() + 2);
+  else if(day === 0) d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+function setInitialWorkDate(){
+  let latest = null;
+  entries.forEach(e => { if(e.date && (!latest || e.date > latest)) latest = e.date; });
+  if(latest){
+    dateInput.value = nextWorkDate(latest);
+  } else {
+    dateInput.value = new Date().toISOString().slice(0, 10);
+  }
+}
+
 function applySuggestionForCurrentDong(){
   const dong = dongSel.value;
   if(currentType === 'install'){
@@ -778,6 +798,7 @@ async function loadEntries(){
   renderLog();
   if(!initialSuggestionApplied){
     initialSuggestionApplied = true;
+    setInitialWorkDate();
     applySuggestionForCurrentDong();
   }
 }
@@ -984,8 +1005,10 @@ addBtn.addEventListener('click', () => {
     const floor = floorSel.value;
     const existingDate = getInstallDate(dong, floor);
     if(existingDate){
-      const proceed = confirm(`${dong}동 ${floor}층은 이미 ${mdLabel(existingDate)}에 설치 등록되어 있습니다.\n그래도 추가하시겠습니까?`);
+      const proceed = confirm(`${dong}동 ${floor}층은 이미 ${mdLabel(existingDate)}에 설치한 층입니다.\n덮어쓰시겠습니까?`);
       if(!proceed) return;
+      // 기존 등록 내용을 지우고 새 값으로 덮어씀
+      entries = entries.filter(e => !(e.type === 'install' && e.dong === dong && e.floor === floor));
     }
   }
 
@@ -1012,10 +1035,6 @@ populateSheetOptions();
 applyRulePrice();
 updateBreakdown();
 loadEntries();
-
-// default today's date
-const today = new Date();
-dateInput.value = today.toISOString().slice(0,10);
 </script>
 </body>
 </html>
