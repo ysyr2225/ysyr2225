@@ -722,6 +722,25 @@ const JSONBIN_BIN_ID = '6a81c64eda38895dfeeb85fd';
 const JSONBIN_API_KEY = '$2a$10$qyZUUO.S8EXC9KuX2iE1QutrHwoBmtfockunTzmY4ZsHTN2VvMTue';
 const JSONBIN_BASE = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
 
+let initialSuggestionApplied = false;
+
+function applySuggestionForCurrentDong(){
+  const dong = dongSel.value;
+  if(currentType === 'install'){
+    const suggested = getSuggestedNextFloor(dong, 'install');
+    if(suggested && [...floorSel.options].some(o => o.value === suggested)){
+      floorSel.value = suggested;
+    }
+  } else if(currentType === 'dismantle'){
+    const suggested = getSuggestedNextFloor(dong, 'dismantle', sheetSel.value);
+    if(suggested && floorChipsEl.querySelector(`.floor-chip[data-floor="${suggested}"]`)){
+      selectedFloors = new Set([suggested]);
+      populateFloorChips();
+    }
+  }
+  updateBreakdown();
+}
+
 async function loadEntries(){
   try{
     const res = await fetch(`${JSONBIN_BASE}/latest`, {
@@ -733,6 +752,10 @@ async function loadEntries(){
     entries = [];
   }
   renderLog();
+  if(!initialSuggestionApplied){
+    initialSuggestionApplied = true;
+    applySuggestionForCurrentDong();
+  }
 }
 
 async function saveEntries(){
