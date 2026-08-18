@@ -633,15 +633,46 @@ typeSeg.addEventListener('click', (ev) => {
   updateBreakdown();
 });
 
+// 해당 동에서 가장 최근에 설치/해체된 층 바로 위층을 추천
+function getSuggestedNextFloor(dong, type, sheetKey){
+  const candidates = entries.filter(e =>
+    e.dong === dong && e.type === type && (type === 'install' || e.sheetKey === sheetKey)
+  );
+  if(candidates.length === 0) return null;
+  // entries는 최신순(unshift)으로 쌓이므로 첫 항목이 가장 최근
+  const mostRecent = candidates[0];
+  return String(Number(mostRecent.floor) + 1);
+}
+
 sheetSel.addEventListener('change', () => {
-  if(currentType === 'dismantle') populateFloorChips();
+  if(currentType === 'dismantle'){
+    populateFloorChips();
+    const suggested = getSuggestedNextFloor(dongSel.value, 'dismantle', sheetSel.value);
+    if(suggested && floorChipsEl.querySelector(`.floor-chip[data-floor="${suggested}"]`)){
+      selectedFloors = new Set([suggested]);
+      populateFloorChips();
+    }
+  }
   updateBreakdown();
 });
 
 dongSel.addEventListener('change', () => {
   populateFloors();
-  if(currentType === 'dismantle') populateFloorChips();
   applyRulePrice();
+  if(currentType === 'install'){
+    const suggested = getSuggestedNextFloor(dongSel.value, 'install');
+    if(suggested && [...floorSel.options].some(o => o.value === suggested)){
+      floorSel.value = suggested;
+    }
+  }
+  if(currentType === 'dismantle'){
+    populateFloorChips();
+    const suggested = getSuggestedNextFloor(dongSel.value, 'dismantle', sheetSel.value);
+    if(suggested && floorChipsEl.querySelector(`.floor-chip[data-floor="${suggested}"]`)){
+      selectedFloors = new Set([suggested]);
+      populateFloorChips();
+    }
+  }
   updateBreakdown();
 });
 floorSel.addEventListener('change', updateBreakdown);
