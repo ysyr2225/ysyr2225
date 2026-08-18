@@ -341,6 +341,7 @@ let matrixType = 'install';
 let matrixSheetKey = sheetKeys[0];
 
 function fmt(n){ return n.toLocaleString('ko-KR', {maximumFractionDigits: 2}); }
+function fmt1(n){ return n.toLocaleString('ko-KR', {minimumFractionDigits: 1, maximumFractionDigits: 1}); }
 function fmtWon(n){ return Math.round(n).toLocaleString('ko-KR') + '원'; }
 function typeLabel(t){ return t === 'dismantle' ? '해체' : '설치'; }
 
@@ -540,6 +541,8 @@ function renderMatrix(){
   const k = matrixSheetKey;
   const dongs = allDongsForSheet(k);
   const floors = allFloorsForSheet(k);
+  const isYeonchang = k === '대방수원2차-연창 수직보호망';
+  const fmtCell = isYeonchang ? fmt : fmt1;
 
   const usedMonths = new Set();
 
@@ -557,9 +560,9 @@ function renderMatrix(){
         if(m) usedMonths.add(m);
         const color = m ? hexToRgba(MONTH_COLORS[m], 0.45) : 'rgba(153,153,153,0.45)';
         const dateShort = mdLabel(match.date);
-        return `<td class="done" style="background:${color};"><span class="date-label">${dateShort}</span>${fmt(area)}</td>`;
+        return `<td class="done" style="background:${color};"><span class="date-label">${dateShort}</span>${fmtCell(area)}</td>`;
       }
-      return `<td>${fmt(area)}</td>`;
+      return `<td>${fmtCell(area)}</td>`;
     }).join('');
     return `<tr><th>${f}F</th>${cells}</tr>`;
   }).join('') + '</tbody>';
