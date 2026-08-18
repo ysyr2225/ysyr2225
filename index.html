@@ -640,8 +640,16 @@ function getSuggestedNextFloor(dong, type, sheetKey){
     e.dong === dong && e.type === type && (type === 'install' || e.sheetKey === sheetKey)
   );
   if(candidates.length === 0) return null;
-  // entries는 최신순(unshift)으로 쌓이므로 첫 항목이 가장 최근
-  const mostRecent = candidates[0];
+  // 입력 순서가 아니라 실제 시공 날짜(date) 기준으로 가장 최근 항목을 찾음
+  // 날짜가 같으면 층수가 더 높은 쪽을 우선
+  const mostRecent = candidates.reduce((best, cur) => {
+    if(!best) return cur;
+    const curDate = cur.date || '';
+    const bestDate = best.date || '';
+    if(curDate > bestDate) return cur;
+    if(curDate === bestDate && Number(cur.floor) > Number(best.floor)) return cur;
+    return best;
+  }, null);
   return String(Number(mostRecent.floor) + 1);
 }
 
