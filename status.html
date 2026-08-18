@@ -219,7 +219,8 @@
     border-collapse:collapse; font-family:'Roboto Mono',monospace; font-size:10.5px; white-space:nowrap;
   }
   .matrix-table th, .matrix-table td{
-    border:1px solid #e5e0d0; padding:4px 3px; text-align:center; min-width:42px;
+    border:1px solid #e5e0d0; padding:4px 3px; text-align:center; min-width:42px; height:20px;
+    box-sizing:content-box;
   }
   .matrix-table thead th{
     position:sticky; top:0; background:var(--paper-dim); font-weight:700; color:var(--ink); z-index:2;
@@ -229,7 +230,11 @@
   }
   .matrix-table td{ background:#fffdf8; color:var(--ink-dim); }
   .matrix-table td.empty{ color:#d5cfbd; }
-  .matrix-table td.done{ color:#fff; font-weight:700; }
+  .matrix-table td.done{ position:relative; color:transparent; }
+  .matrix-table td.done .date-label{
+    position:absolute; top:2px; left:3px; font-size:8px; line-height:1;
+    color:#fff; font-weight:700;
+  }
 
   .matrix-legend{
     display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;
@@ -539,11 +544,12 @@ function renderMatrix(){
       }
       const match = getMatrixEntry(k, d, f, matrixType);
       if(match){
-        const m = monthOf(match.date);
+        const si = settlementInfo(match.date);
+        const m = si ? Number(si.label.replace('월','')) : null;
         if(m) usedMonths.add(m);
         const color = m ? MONTH_COLORS[m] : '#999';
         const dateShort = mdLabel(match.date);
-        return `<td class="done" style="background:${color};">${dateShort}</td>`;
+        return `<td class="done" style="background:${color};"><span class="date-label">${dateShort}</span></td>`;
       }
       return `<td>${fmt(area)}</td>`;
     }).join('');
