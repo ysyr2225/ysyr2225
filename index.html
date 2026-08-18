@@ -442,6 +442,7 @@ const floorChipsField = document.getElementById('floor-chips-field');
 const floorChipsEl = document.getElementById('floor-chips');
 
 let currentType = 'install';
+let floorManuallySet = false;
 let priceManuallyEdited = false;
 let selectedFloors = new Set();
 
@@ -657,6 +658,7 @@ sheetSel.addEventListener('change', () => {
 });
 
 dongSel.addEventListener('change', () => {
+  floorManuallySet = false;
   populateFloors();
   applyRulePrice();
   if(currentType === 'install'){
@@ -675,7 +677,21 @@ dongSel.addEventListener('change', () => {
   }
   updateBreakdown();
 });
-floorSel.addEventListener('change', updateBreakdown);
+floorSel.addEventListener('change', () => {
+  floorManuallySet = true;
+  updateBreakdown();
+});
+// 층 선택창이 실제로 열리기 직전에 한 번 더 추천 층을 반영 (동 선택 직후 연속으로 층을 여는 경우 타이밍 보정)
+function reapplyFloorSuggestionIfNeeded(){
+  if(currentType !== 'install' || floorManuallySet) return;
+  const suggested = getSuggestedNextFloor(dongSel.value, 'install');
+  if(suggested && [...floorSel.options].some(o => o.value === suggested)){
+    floorSel.value = suggested;
+  }
+}
+floorSel.addEventListener('focus', reapplyFloorSuggestionIfNeeded);
+floorSel.addEventListener('mousedown', reapplyFloorSuggestionIfNeeded);
+floorSel.addEventListener('touchstart', reapplyFloorSuggestionIfNeeded, { passive: true });
 priceInput.addEventListener('input', () => {
   priceManuallyEdited = true;
   updateBreakdown();
