@@ -506,12 +506,16 @@ function updatePriceNote(){
 }
 
 // 소수점 둘째 자리까지 있는 면적값은 소수 첫째 자리로 올림 처리 (예: 55.56 -> 55.6, 39.98 -> 40)
-function normalizeArea(v){
+function normalizeArea(v, sheetKey){
   if(typeof v !== 'number') return v;
+  const isYeonchang = sheetKey && sheetKey.includes('연창');
+  if(isYeonchang){
+    return Math.round(v * 100) / 100; // 연창: 소수점 둘째 자리까지 유지
+  }
   const fixed2 = Math.round(v * 100) / 100; // 부동소수점 오차 제거
   const hundredths = Math.round((fixed2 * 100) % 10);
   if(hundredths !== 0){
-    return Math.ceil(fixed2 * 10) / 10;
+    return Math.ceil(fixed2 * 10) / 10; // 나머지: 소수점 첫째 자리로 올림
   }
   return fixed2;
 }
@@ -525,7 +529,7 @@ function currentItems(){
     const floors = Array.from(selectedFloors).sort((a,b)=>Number(b)-Number(a));
     return floors.map(floor => {
       const v = dongData[floor];
-      return { key: k, title: shortTitle(k), floor, area: (typeof v === 'number') ? normalizeArea(v) : null };
+      return { key: k, title: shortTitle(k), floor, area: (typeof v === 'number') ? normalizeArea(v, k) : null };
     });
   }
   // 설치: 5개 항목 전체 합산 (층 1개)
@@ -533,7 +537,7 @@ function currentItems(){
   return sheetKeys.map(k => {
     const dongData = DATA[k].grid[dong] || {};
     const v = dongData[floor];
-    return { key: k, title: shortTitle(k), floor, area: (typeof v === 'number') ? normalizeArea(v) : null };
+    return { key: k, title: shortTitle(k), floor, area: (typeof v === 'number') ? normalizeArea(v, k) : null };
   });
 }
 
