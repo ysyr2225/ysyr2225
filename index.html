@@ -236,6 +236,23 @@
     text-align:center; padding:26px 10px; color:var(--ink-dim); font-size:13px;
   }
 
+  .type-section-header{
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14px; color:var(--ink);
+    padding:4px 4px 8px; display:flex; align-items:center; gap:8px;
+  }
+  .type-section-header .dot{width:9px;height:9px;border-radius:50%;background:var(--orange);}
+  .type-section-header.dismantle .dot{background:var(--teal);}
+  .type-section-total{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:10px 4px 18px; margin-top:2px;
+  }
+  .type-section-total .label{
+    font-family:'Roboto Mono',monospace; font-size:11px; color:var(--ink-dim); letter-spacing:.05em;
+  }
+  .type-section-total .amt{
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:15px; color:var(--orange-dim);
+  }
+
   .group-header{
     font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:12.5px; color:var(--orange-dim);
     padding:12px 4px 4px; text-transform:none;
@@ -436,6 +453,11 @@ function populateDongs(){
   dongSel.innerHTML = allDongs.map(d => `<option value="${d}">${d}동</option>`).join('');
 }
 
+function getInstallDate(dong, floor){
+  const found = entries.find(e => e.type === 'install' && e.dong === dong && e.floor === floor);
+  return found ? found.date : null;
+}
+
 function populateFloors(){
   const floorSet = new Set();
   sheetKeys.forEach(k => {
@@ -448,7 +470,13 @@ function populateFloors(){
     floorSel.disabled = true;
   } else {
     floorSel.disabled = false;
-    floorSel.innerHTML = floors.map(f => `<option value="${f}">${f}층</option>`).join('');
+    const prevValue = floorSel.value;
+    floorSel.innerHTML = floors.map(f => {
+      const installDate = getInstallDate(dongSel.value, f);
+      const suffix = installDate ? ` (${mdLabel(installDate)} 설치)` : '';
+      return `<option value="${f}">${f}층${suffix}</option>`;
+    }).join('');
+    if(floors.includes(prevValue)) floorSel.value = prevValue;
   }
 }
 
@@ -477,6 +505,17 @@ function updatePriceNote(){
   }
 }
 
+// 소수점 둘째 자리까지 있는 면적값은 소수 첫째 자리로 올림 처리 (예: 55.56 -> 55.6, 39.98 -> 40)
+function normalizeArea(v){
+  if(typeof v !== 'number') return v;
+  const fixed2 = Math.round(v * 100) / 100; // 부동소수점 오차 제거
+  const hundredths = Math.round((fixed2 * 100) % 10);
+  if(hundredths !== 0){
+    return Math.ceil(fixed2 * 10) / 10;
+  }
+  return fixed2;
+}
+
 function currentItems(){
   const dong = dongSel.value;
   // 해체: 시트(항목) 1개 + 선택된 층(들) 각각
@@ -486,7 +525,7 @@ function currentItems(){
     const floors = Array.from(selectedFloors).sort((a,b)=>Number(b)-Number(a));
     return floors.map(floor => {
       const v = dongData[floor];
-      return { key: k, title: shortTitle(k), floor, area: (typeof v === 'number') ? v : null };
+      return { key: k, title: shortTitle(k), floor, area: (typeof v === 'number') ? normalizeArea(v) : null };
     });
   }
   // 설치: 5개 항목 전체 합산 (층 1개)
@@ -494,8 +533,25 @@ function currentItems(){
   return sheetKeys.map(k => {
     const dongData = DATA[k].grid[dong] || {};
     const v = dongData[floor];
-    return { key: k, title: shortTitle(k), floor, area: (typeof v === 'number') ? v : null };
+    return { key: k, title: shortTitle(k), floor, area: (typeof v === 'number') ? normalizeArea(v) : null };
   });
+}
+
+function getDismantledFloors(sheetKey, dong){
+  const done = new Set();
+  entries.forEach(e => {
+    if(e.type === 'dismantle' && e.sheetKey === sheetKey && e.dong === dong) done.add(e.floor);
+  });
+  return done;
+}
+
+// 그리드에 5개씩 채워지는 순서를 ㄹ자(지그재그)로 재배열
+// (홀수 번째 줄은 뒤집어서, 화면상 좌→우, 우→좌가 번갈아 나오게 함)
+function zigzagOrder(list, cols){
+  const rows = [];
+  for(let i = 0; i < list.length; i += cols) rows.push(list.slice(i, i + cols));
+  rows.forEach((row, idx) => { if(idx % 2 === 1) row.reverse(); });
+  return rows.flat();
 }
 
 function populateFloorChips(){
@@ -503,14 +559,19 @@ function populateFloorChips(){
   const k = sheetSel.value;
   const dongData = (DATA[k] && DATA[k].grid[dong]) || {};
   const floors = Object.keys(dongData).sort((a,b)=>Number(b)-Number(a));
-  // 선택된 층 중 이제 유효하지 않은 것 제거
-  selectedFloors = new Set(Array.from(selectedFloors).filter(f => floors.includes(f)));
+  const dismantledFloors = getDismantledFloors(k, dong);
+  // 선택된 층 중 이제 유효하지 않거나 이미 해체완료된 것 제거
+  selectedFloors = new Set(Array.from(selectedFloors).filter(f => floors.includes(f) && !dismantledFloors.has(f)));
 
   if(floors.length === 0){
     floorChipsEl.innerHTML = `<div style="grid-column:1/-1;color:rgba(255,255,255,0.3);font-size:12px;padding:4px 0;">이 동에는 데이터가 없습니다</div>`;
     return;
   }
-  floorChipsEl.innerHTML = floors.map(f => {
+  const ordered = zigzagOrder(floors, 5);
+  floorChipsEl.innerHTML = ordered.map(f => {
+    if(dismantledFloors.has(f)){
+      return `<div class="floor-chip na" title="이미 해체 완료됨">${f}F</div>`;
+    }
     const sel = selectedFloors.has(f) ? ' selected' : '';
     return `<div class="floor-chip${sel}" data-floor="${f}">${f}F</div>`;
   }).join('');
@@ -723,50 +784,64 @@ function renderLog(){
   if(entries.length === 0){
     logList.innerHTML = `<div class="empty-state">아직 추가된 작업이 없습니다.</div>`;
   } else {
-    // 항목(시트) 순서대로 그룹핑 - sheetKeys 순서 기준, 알 수 없는 항목은 뒤로
-    const groups = {};
-    entries.forEach((e, i) => {
-      const key = e.sheetTitle;
-      if(!groups[key]) groups[key] = [];
-      groups[key].push({ e, i });
-    });
-    const knownOrder = sheetKeys.map(k => shortTitle(k)).filter(t => groups[t]);
-    const otherOrder = Object.keys(groups).filter(t => !knownOrder.includes(t));
-    const order = [...knownOrder, ...otherOrder];
+    // 1) 설치/해체로 먼저 구분, 2) 그 안에서 항목(시트)별로 그룹핑
+    const renderTypeSection = (type, label) => {
+      const typeEntries = [];
+      entries.forEach((e, i) => { if(e.type === type || (type==='install' && e.type !== 'dismantle')) typeEntries.push({e, i}); });
+      if(typeEntries.length === 0) return '';
 
-    logList.innerHTML = order.map(title => {
-      const rows = groups[title];
-      const subtotal = rows.reduce((s, r) => s + r.e.amount, 0);
-      const rowsHtml = rows.map(({e, i}) => {
-        const si = settlementInfo(e.date);
-        return `
-        <div class="entry">
-          <div class="info">
-            <div class="line1">
-              <span class="dt">${mdLabel(e.date)}</span>
-              ${si ? `<span class="month-badge">${si.label} 시공</span>` : ''}
-              <span class="type-badge ${e.type === 'dismantle' ? 'dismantle' : ''}">${typeLabel(e.type)}</span>
-              <span>${e.dong}동 ${e.floor}층</span>
+      const groups = {};
+      typeEntries.forEach(({e, i}) => {
+        const key = e.sheetTitle;
+        if(!groups[key]) groups[key] = [];
+        groups[key].push({ e, i });
+      });
+      const knownOrder = sheetKeys.map(k => shortTitle(k)).filter(t => groups[t]);
+      const otherOrder = Object.keys(groups).filter(t => !knownOrder.includes(t));
+      const order = [...knownOrder, ...otherOrder];
+
+      const itemsHtml = order.map(title => {
+        const rows = groups[title];
+        const subtotal = rows.reduce((s, r) => s + r.e.amount, 0);
+        const rowsHtml = rows.map(({e, i}) => {
+          const si = settlementInfo(e.date);
+          return `
+          <div class="entry">
+            <div class="info">
+              <div class="line1">
+                <span class="dt">${mdLabel(e.date)}</span>
+                ${si ? `<span class="month-badge">${si.label} 시공</span>` : ''}
+                <span>${e.dong}동 ${e.floor}층</span>
+              </div>
+              <div class="line2">${fmt(e.area)}m² × ${e.price.toLocaleString('ko-KR')}원</div>
             </div>
-            <div class="line2">${fmt(e.area)}m² × ${e.price.toLocaleString('ko-KR')}원</div>
-          </div>
-          <div class="amt">${fmtWon(e.amount)}</div>
-          <button class="del" data-idx="${i}" title="삭제">✕</button>
-        </div>`;
+            <div class="amt">${fmtWon(e.amount)}</div>
+            <button class="del" data-idx="${i}" title="삭제">✕</button>
+          </div>`;
+        }).join('');
+        return `<div class="group-header">${title}</div>${rowsHtml}<div class="group-subtotal"><span class="label">${title} 소계</span><span class="amt">${fmtWon(subtotal)}</span></div>`;
       }).join('');
-      return `<div class="group-header">${title}</div>${rowsHtml}<div class="group-subtotal"><span class="label">${title} 소계</span><span class="amt">${fmtWon(subtotal)}</span></div>`;
-    }).join('');
+
+      const sectionTotal = typeEntries.reduce((s, {e}) => s + e.amount, 0);
+      const dotClass = type === 'dismantle' ? ' dismantle' : '';
+      return `<div class="type-section-header${dotClass}"><span class="dot"></span>${label}</div>${itemsHtml}<div class="type-section-total"><span class="label">${label} 합계</span><span class="amt">${fmtWon(sectionTotal)}</span></div>`;
+    };
+
+    logList.innerHTML = renderTypeSection('install', '설치') + renderTypeSection('dismantle', '해체');
   }
   const total = entries.reduce((s,e)=>s+e.amount, 0);
   totalValue.textContent = fmtWon(total);
   exportBtn.disabled = entries.length === 0;
   renderMonthSummary();
   renderItemSummary();
+  if(currentType === 'install') populateFloors();
+  if(currentType === 'dismantle') populateFloorChips();
 }
 
 logList.addEventListener('click', (ev) => {
   const btn = ev.target.closest('.del');
   if(!btn) return;
+  if(!confirm('삭제하시겠습니까?')) return;
   const idx = Number(btn.dataset.idx);
   entries.splice(idx, 1);
   renderLog();
@@ -822,6 +897,16 @@ addBtn.addEventListener('click', () => {
   const date = dateInput.value;
   const dong = dongSel.value;
   const type = currentType;
+
+  if(type === 'install'){
+    const floor = floorSel.value;
+    const existingDate = getInstallDate(dong, floor);
+    if(existingDate){
+      const proceed = confirm(`${dong}동 ${floor}층은 이미 ${mdLabel(existingDate)}에 설치 등록되어 있습니다.\n그래도 추가하시겠습니까?`);
+      if(!proceed) return;
+    }
+  }
+
   items.forEach(it => {
     entries.unshift({
       date, type, sheetKey: it.key, sheetTitle: it.title,
