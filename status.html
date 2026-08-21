@@ -401,7 +401,7 @@ function renderItemSummary(){
         ? `<span class="period">(설치 ${fmtWon(g.install)} · 해체 ${fmtWon(g.dismantle)})</span>` : '';
       return `<div class="m-row"><span class="name">${ik} ${detail}</span><span class="amt">${fmtWon(g.sum)}</span></div>`;
     }).join('');
-    const monthTotal = `<div class="m-row" style="border-top:1px solid #ddd6c3;margin-top:2px;padding-top:8px;padding-bottom:14px;"><span class="name" style="font-size:12.5px;color:var(--orange-dim);font-weight:700;">월별 총합</span><span class="amt" style="font-size:13.5px;">${fmtWon(mg.sum)}</span></div>`;
+    const monthTotal = `<div class="m-row" style="border-top:1px solid #ddd6c3;margin-top:2px;padding-top:8px;padding-bottom:14px;"><span class="name" style="font-size:12.5px;color:var(--orange-dim);font-weight:700;">${mg.label} 총합</span><span class="amt" style="font-size:13.5px;">${fmtWon(mg.sum)}</span></div>`;
     return monthHeader + itemRows + monthTotal;
   }).join('') +
   `<div class="m-row" style="border-top:2px solid var(--orange);margin-top:2px;padding-top:10px;"><span class="name" style="font-size:13.5px;">총합계</span><span class="amt" style="font-size:15px;">${fmtWon(grandTotal)}</span></div>`;
