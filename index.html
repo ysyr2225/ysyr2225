@@ -369,7 +369,6 @@
         <button class="clear-link" id="clear-btn">전체 삭제</button>
       </div>
     </div>
-    <div id="month-summary" class="month-summary" style="display:none;"></div>
     <div id="item-summary" class="month-summary" style="display:none;"></div>
     <div id="log-list">
       <div class="empty-state">아직 추가된 작업이 없습니다.</div>
@@ -825,36 +824,6 @@ function mdLabel(dateStr){
 
 function typeLabel(t){ return t === 'dismantle' ? '해체' : '설치'; }
 
-function renderMonthSummary(){
-  const summaryEl = document.getElementById('month-summary');
-  if(entries.length === 0){
-    summaryEl.style.display = 'none';
-    summaryEl.innerHTML = '';
-    return;
-  }
-  const groups = {};
-  entries.forEach(e => {
-    const si = settlementInfo(e.date);
-    const key = si ? si.key : '__nodate__';
-    if(!groups[key]) groups[key] = { label: si ? si.label : '날짜 미기재', period: si ? si.period : '', sum: 0 };
-    groups[key].sum += e.amount;
-  });
-  const keys = Object.keys(groups).sort();
-  if(keys.length <= 1){
-    summaryEl.style.display = 'none';
-    summaryEl.innerHTML = '';
-    return;
-  }
-  summaryEl.style.display = 'block';
-  summaryEl.innerHTML = keys.map(k => {
-    const g = groups[k];
-    return `<div class="m-row">
-      <span class="name">${g.label}${g.period ? `<span class="period">(${g.period})</span>` : ''}</span>
-      <span class="amt">${fmtWon(g.sum)}</span>
-    </div>`;
-  }).join('');
-}
-
 function renderItemSummary(){
   const summaryEl = document.getElementById('item-summary');
   if(entries.length === 0){
@@ -862,25 +831,41 @@ function renderItemSummary(){
     summaryEl.innerHTML = '';
     return;
   }
-  const groups = {};
-  const order = [];
+  // 1) 월별로 그룹핑, 2) 각 월 안에서 항목별 소계
+  const monthGroups = {};
+  const monthOrder = [];
   entries.forEach(e => {
-    const key = e.sheetTitle;
-    if(!groups[key]){ groups[key] = { install: 0, dismantle: 0, sum: 0 }; order.push(key); }
-    groups[key][e.type === 'dismantle' ? 'dismantle' : 'install'] += e.amount;
-    groups[key].sum += e.amount;
+    const si = settlementInfo(e.date);
+    const key = si ? si.key : '__nodate__';
+    if(!monthGroups[key]){
+      monthGroups[key] = { label: si ? si.label : '날짜 미기재', period: si ? si.period : '', items: {}, itemOrder: [], sum: 0 };
+      monthOrder.push(key);
+    }
+    const mg = monthGroups[key];
+    const itemKey = e.sheetTitle;
+    if(!mg.items[itemKey]){ mg.items[itemKey] = { install: 0, dismantle: 0, sum: 0 }; mg.itemOrder.push(itemKey); }
+    mg.items[itemKey][e.type === 'dismantle' ? 'dismantle' : 'install'] += e.amount;
+    mg.items[itemKey].sum += e.amount;
+    mg.sum += e.amount;
   });
+  monthOrder.sort();
+
   const grandTotal = entries.reduce((s,e)=>s+e.amount, 0);
+
   summaryEl.style.display = 'block';
-  summaryEl.innerHTML =
-    `<div class="m-row" style="border-bottom:1px solid #ddd6c3;padding-bottom:8px;margin-bottom:2px;"><span class="name" style="font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.04em;">항목별 소계</span></div>` +
-    order.map(k => {
-      const g = groups[k];
+  summaryEl.innerHTML = monthOrder.map(mk => {
+    const mg = monthGroups[mk];
+    const monthHeader = `<div class="m-row" style="border-bottom:1px solid #ddd6c3;padding-bottom:8px;margin-bottom:2px;"><span class="name" style="font-size:12.5px;color:var(--ink);font-weight:700;">${mg.label}${mg.period ? `<span class="period">(${mg.period})</span>` : ''}</span></div>`;
+    const itemRows = mg.itemOrder.map(ik => {
+      const g = mg.items[ik];
       const detail = (g.install > 0 && g.dismantle > 0)
         ? `<span class="period">(설치 ${fmtWon(g.install)} · 해체 ${fmtWon(g.dismantle)})</span>` : '';
-      return `<div class="m-row"><span class="name">${k} ${detail}</span><span class="amt">${fmtWon(g.sum)}</span></div>`;
-    }).join('') +
-    `<div class="m-row" style="border-top:2px solid var(--orange);margin-top:2px;padding-top:10px;"><span class="name" style="font-size:13.5px;">총합계</span><span class="amt" style="font-size:15px;">${fmtWon(grandTotal)}</span></div>`;
+      return `<div class="m-row"><span class="name">${ik} ${detail}</span><span class="amt">${fmtWon(g.sum)}</span></div>`;
+    }).join('');
+    const monthTotal = `<div class="m-row" style="border-top:1px solid #ddd6c3;margin-top:2px;padding-top:8px;padding-bottom:14px;"><span class="name" style="font-size:12.5px;color:var(--orange-dim);font-weight:700;">월별 총합</span><span class="amt" style="font-size:13.5px;">${fmtWon(mg.sum)}</span></div>`;
+    return monthHeader + itemRows + monthTotal;
+  }).join('') +
+  `<div class="m-row" style="border-top:2px solid var(--orange);margin-top:2px;padding-top:10px;"><span class="name" style="font-size:13.5px;">총합계</span><span class="amt" style="font-size:15px;">${fmtWon(grandTotal)}</span></div>`;
 }
 
 function renderLog(){
@@ -935,7 +920,6 @@ function renderLog(){
   const total = entries.reduce((s,e)=>s+e.amount, 0);
   totalValue.textContent = fmtWon(total);
   exportBtn.disabled = entries.length === 0;
-  renderMonthSummary();
   renderItemSummary();
   if(currentType === 'install') populateFloors();
   if(currentType === 'dismantle') populateFloorChips();
