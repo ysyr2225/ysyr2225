@@ -271,7 +271,6 @@
     </p>
     <div class="last-sync" id="last-sync">불러오는 중…</div>
 
-    <div id="month-summary" class="month-summary" style="display:none;"></div>
     <div id="item-summary" class="month-summary" style="display:none;"></div>
     <div id="log-list">
       <div class="empty-state"><div class="big">📋</div>아직 등록된 시공 내역이 없습니다.</div>
@@ -280,6 +279,7 @@
       <div class="label">TOTAL</div>
       <div class="value" id="total-value">0원</div>
     </div>
+    <div id="month-summary" class="month-summary" style="display:none; margin-top:16px; margin-bottom:0;"></div>
   </div>
 
   <div class="panel" id="matrix-panel" style="display:none;">
@@ -341,7 +341,6 @@ let matrixType = 'install';
 let matrixSheetKey = sheetKeys[0];
 
 function fmt(n){ return n.toLocaleString('ko-KR', {maximumFractionDigits: 2}); }
-function fmt1(n){ return n.toLocaleString('ko-KR', {minimumFractionDigits: 1, maximumFractionDigits: 1}); }
 function fmtWon(n){ return Math.round(n).toLocaleString('ko-KR') + '원'; }
 function typeLabel(t){ return t === 'dismantle' ? '해체' : '설치'; }
 
@@ -379,12 +378,13 @@ function renderMonthSummary(){
     groups[key].sum += e.amount;
   });
   const keys = Object.keys(groups).sort();
-  if(keys.length <= 1){ summaryEl.style.display = 'none'; summaryEl.innerHTML=''; return; }
   summaryEl.style.display = 'block';
-  summaryEl.innerHTML = keys.map(k => {
-    const g = groups[k];
-    return `<div class="m-row"><span class="name">${g.label}${g.period ? `<span class="period">(${g.period})</span>` : ''}</span><span class="amt">${fmtWon(g.sum)}</span></div>`;
-  }).join('');
+  summaryEl.innerHTML =
+    `<div class="m-row" style="border-bottom:1px solid #ddd6c3;padding-bottom:8px;margin-bottom:2px;"><span class="name" style="font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.04em;">월별 합계</span></div>` +
+    keys.map(k => {
+      const g = groups[k];
+      return `<div class="m-row"><span class="name">${g.label}${g.period ? `<span class="period">(${g.period})</span>` : ''}</span><span class="amt">${fmtWon(g.sum)}</span></div>`;
+    }).join('');
 }
 
 function renderItemSummary(){
@@ -541,8 +541,6 @@ function renderMatrix(){
   const k = matrixSheetKey;
   const dongs = allDongsForSheet(k);
   const floors = allFloorsForSheet(k);
-  const isYeonchang = k === '대방수원2차-연창 수직보호망';
-  const fmtCell = isYeonchang ? fmt : fmt1;
 
   const usedMonths = new Set();
 
@@ -560,9 +558,9 @@ function renderMatrix(){
         if(m) usedMonths.add(m);
         const color = m ? hexToRgba(MONTH_COLORS[m], 0.45) : 'rgba(153,153,153,0.45)';
         const dateShort = mdLabel(match.date);
-        return `<td class="done" style="background:${color};"><span class="date-label">${dateShort}</span>${fmtCell(area)}</td>`;
+        return `<td class="done" style="background:${color};"><span class="date-label">${dateShort}</span>${fmt(area)}</td>`;
       }
-      return `<td>${fmtCell(area)}</td>`;
+      return `<td>${fmt(area)}</td>`;
     }).join('');
     return `<tr><th>${f}F</th>${cells}</tr>`;
   }).join('') + '</tbody>';
