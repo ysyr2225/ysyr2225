@@ -790,9 +790,14 @@ async function loadEntries(){
       cache: 'no-store',
       headers: { 'X-Master-Key': JSONBIN_API_KEY, 'Cache-Control': 'no-cache' }
     });
+    if(!res.ok){
+      alert(`[진단] 불러오기 실패: HTTP ${res.status}`);
+    }
     const data = await res.json();
     entries = (data && data.record && Array.isArray(data.record.entries)) ? data.record.entries : [];
+    console.log('[진단] 불러온 entries 개수:', entries.length);
   }catch(e){
+    alert(`[진단] 불러오기 중 오류: ${e.message}`);
     entries = [];
   }
   renderLog();
@@ -812,11 +817,16 @@ async function saveEntries(){
         cache: 'no-store',
         headers: { 'X-Master-Key': JSONBIN_API_KEY, 'Cache-Control': 'no-cache' }
       });
+      if(!cur.ok){
+        alert(`[진단] 최신 데이터 조회 실패: HTTP ${cur.status}`);
+      }
       const curData = await cur.json();
       if(curData && curData.record) latestRecord = curData.record;
-    }catch(e){ /* ignore, proceed with entries only */ }
+    }catch(e){
+      alert(`[진단] 최신 데이터 조회 중 오류: ${e.message}`);
+    }
 
-    await fetch(JSONBIN_BASE, {
+    const putRes = await fetch(JSONBIN_BASE, {
       method: 'PUT',
       cache: 'no-store',
       headers: {
@@ -825,7 +835,13 @@ async function saveEntries(){
       },
       body: JSON.stringify({ ...latestRecord, entries })
     });
-  }catch(e){ /* best effort */ }
+    if(!putRes.ok){
+      const txt = await putRes.text();
+      alert(`[진단] 저장 실패: HTTP ${putRes.status}\n${txt.slice(0,200)}`);
+    }
+  }catch(e){
+    alert(`[진단] 저장 중 오류: ${e.message}`);
+  }
 }
 
 function mdLabel(dateStr){
