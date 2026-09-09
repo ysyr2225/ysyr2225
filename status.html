@@ -460,8 +460,9 @@ function renderLog(){
 async function loadEntries(showSpin){
   if(showSpin) refreshBtn.classList.add('spinning');
   try{
-    const res = await fetch(`${JSONBIN_BASE}/latest`, {
-      headers: { 'X-Master-Key': JSONBIN_API_KEY }
+    const res = await fetch(`${JSONBIN_BASE}/latest?t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { 'X-Master-Key': JSONBIN_API_KEY, 'Cache-Control': 'no-cache' }
     });
     const data = await res.json();
     entries = (data && data.record && Array.isArray(data.record.entries)) ? data.record.entries : [];
