@@ -786,8 +786,9 @@ function applySuggestionForCurrentDong(){
 
 async function loadEntries(){
   try{
-    const res = await fetch(`${JSONBIN_BASE}/latest`, {
-      headers: { 'X-Master-Key': JSONBIN_API_KEY }
+    const res = await fetch(`${JSONBIN_BASE}/latest?t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { 'X-Master-Key': JSONBIN_API_KEY, 'Cache-Control': 'no-cache' }
     });
     const data = await res.json();
     entries = (data && data.record && Array.isArray(data.record.entries)) ? data.record.entries : [];
@@ -804,13 +805,25 @@ async function loadEntries(){
 
 async function saveEntries(){
   try{
+    // 다른 데이터(자재 등)를 덮어쓰지 않도록 최신 상태를 먼저 불러와 병합 후 저장
+    let latestRecord = {};
+    try{
+      const cur = await fetch(`${JSONBIN_BASE}/latest?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'X-Master-Key': JSONBIN_API_KEY, 'Cache-Control': 'no-cache' }
+      });
+      const curData = await cur.json();
+      if(curData && curData.record) latestRecord = curData.record;
+    }catch(e){ /* ignore, proceed with entries only */ }
+
     await fetch(JSONBIN_BASE, {
       method: 'PUT',
+      cache: 'no-store',
       headers: {
         'Content-Type': 'application/json',
         'X-Master-Key': JSONBIN_API_KEY
       },
-      body: JSON.stringify({ entries })
+      body: JSON.stringify({ ...latestRecord, entries })
     });
   }catch(e){ /* best effort */ }
 }
