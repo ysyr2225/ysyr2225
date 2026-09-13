@@ -381,7 +381,7 @@ function renderItemSummary(){
       monthOrder.push(key);
     }
     const mg = monthGroups[key];
-    const itemKey = e.sheetTitle;
+    const itemKey = shortTitle(e.sheetKey);
     if(!mg.items[itemKey]){ mg.items[itemKey] = { install: 0, dismantle: 0, sum: 0 }; mg.itemOrder.push(itemKey); }
     mg.items[itemKey][e.type === 'dismantle' ? 'dismantle' : 'install'] += e.amount;
     mg.items[itemKey].sum += e.amount;
@@ -418,7 +418,7 @@ function renderLog(){
       const groups = {};
       const order = [];
       typeEntries.forEach(e => {
-        const key = e.sheetTitle;
+        const key = shortTitle(e.sheetKey);
         if(!groups[key]){ groups[key] = []; order.push(key); }
         groups[key].push(e);
       });
@@ -484,7 +484,7 @@ exportBtn.addEventListener('click', () => {
     const si = settlementInfo(e.date);
     return {
       '날짜': e.date || '', '시공월': si ? si.label : '', '구분': typeLabel(e.type),
-      '동': e.dong + '동', '층': e.floor + '층', '항목': e.sheetTitle,
+      '동': e.dong + '동', '층': e.floor + '층', '항목': shortTitle(e.sheetKey),
       '면적(m²)': Number(e.area.toFixed(2)), '단가(원)': e.price, '금액(원)': Math.round(e.amount)
     };
   });
