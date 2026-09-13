@@ -810,22 +810,7 @@ async function loadEntries(){
 
 async function saveEntries(){
   try{
-    // 다른 데이터(자재 등)를 덮어쓰지 않도록 최신 상태를 먼저 불러와 병합 후 저장
-    let latestRecord = {};
-    try{
-      const cur = await fetch(`${JSONBIN_BASE}/latest?t=${Date.now()}`, {
-        cache: 'no-store',
-        headers: { 'X-Master-Key': JSONBIN_API_KEY, 'Cache-Control': 'no-cache' }
-      });
-      if(!cur.ok){
-        alert(`[진단] 최신 데이터 조회 실패: HTTP ${cur.status}`);
-      }
-      const curData = await cur.json();
-      if(curData && curData.record) latestRecord = curData.record;
-    }catch(e){
-      alert(`[진단] 최신 데이터 조회 중 오류: ${e.message}`);
-    }
-
+    // 이제 시공 목록 전용 저장소라 다른 데이터와 병합할 필요 없이 바로 저장
     const putRes = await fetch(JSONBIN_BASE, {
       method: 'PUT',
       cache: 'no-store',
@@ -833,7 +818,7 @@ async function saveEntries(){
         'Content-Type': 'application/json',
         'X-Master-Key': JSONBIN_API_KEY
       },
-      body: JSON.stringify({ ...latestRecord, entries })
+      body: JSON.stringify({ entries })
     });
     if(!putRes.ok){
       const txt = await putRes.text();
