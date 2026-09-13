@@ -795,7 +795,13 @@ async function loadEntries(){
     }
     const data = await res.json();
     entries = (data && data.record && Array.isArray(data.record.entries)) ? data.record.entries : [];
-    console.log('[진단] 불러온 entries 개수:', entries.length);
+
+    // 예전 데이터에 남아있는 sheetTitle 필드 정리 (용량 절약) - 있으면 한 번만 정리 후 재저장
+    const needsCleanup = entries.some(e => 'sheetTitle' in e);
+    if(needsCleanup){
+      entries = entries.map(e => { const { sheetTitle, ...rest } = e; return rest; });
+      saveEntries(); // 슬림해진 데이터로 즉시 재저장 (용량 확보)
+    }
   }catch(e){
     alert(`[진단] 불러오기 중 오류: ${e.message}`);
     entries = [];
@@ -811,6 +817,12 @@ async function loadEntries(){
 async function saveEntries(){
   try{
     // 이제 시공 목록 전용 저장소라 다른 데이터와 병합할 필요 없이 바로 저장
+    const payload = JSON.stringify({ entries });
+    const sizeKb = new Blob([payload]).size / 1024;
+    if(sizeKb > 85 && !window.__sizeWarned){
+      window.__sizeWarned = true;
+      alert(`⚠️ 시공 목록 용량이 ${sizeKb.toFixed(1)}KB로 100KB 한도에 가까워지고 있습니다.\n엑셀로 내보내서 백업하신 후, 완료된 예전 항목은 "삭제"로 정리해주시는 것을 권장드려요.`);
+    }
     const putRes = await fetch(JSONBIN_BASE, {
       method: 'PUT',
       cache: 'no-store',
@@ -818,7 +830,7 @@ async function saveEntries(){
         'Content-Type': 'application/json',
         'X-Master-Key': JSONBIN_API_KEY
       },
-      body: JSON.stringify({ entries })
+      body: payload
     });
     if(!putRes.ok){
       const txt = await putRes.text();
@@ -856,7 +868,7 @@ function renderItemSummary(){
       monthOrder.push(key);
     }
     const mg = monthGroups[key];
-    const itemKey = e.sheetTitle;
+    const itemKey = shortTitle(e.sheetKey);
     if(!mg.items[itemKey]){ mg.items[itemKey] = { install: 0, dismantle: 0, sum: 0 }; mg.itemOrder.push(itemKey); }
     mg.items[itemKey][e.type === 'dismantle' ? 'dismantle' : 'install'] += e.amount;
     mg.items[itemKey].sum += e.amount;
@@ -894,7 +906,7 @@ function renderLog(){
 
       const groups = {};
       typeEntries.forEach(({e, i}) => {
-        const key = e.sheetTitle;
+        const key = shortTitle(e.sheetKey);
         if(!groups[key]) groups[key] = [];
         groups[key].push({ e, i });
       });
@@ -969,7 +981,7 @@ function exportToExcel(){
       '구분': typeLabel(e.type),
       '동': e.dong + '동',
       '층': e.floor + '층',
-      '항목': e.sheetTitle,
+      '항목': shortTitle(e.sheetKey),
       '면적(m²)': Number(e.area.toFixed(2)),
       '단가(원)': e.price,
       '금액(원)': Math.round(e.amount)
@@ -1012,7 +1024,7 @@ addBtn.addEventListener('click', () => {
 
   items.forEach(it => {
     entries.unshift({
-      date, type, sheetKey: it.key, sheetTitle: it.title,
+      date, type, sheetKey: it.key,
       dong, floor: it.floor, area: it.area, price,
       amount: it.area * price
     });
