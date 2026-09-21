@@ -170,6 +170,15 @@
     border:none; background:none; color:#b8ac93; cursor:pointer; font-size:13px; line-height:1; padding:2px;
   }
   .loc-chip .del:hover{ color:var(--orange); }
+  .loc-note{
+    font-size:12px; color:var(--ink-dim); padding:0 4px 12px; font-style:italic;
+  }
+  .dong-preview{
+    background:var(--blue-950); border-radius:7px; padding:10px 12px; margin-bottom:12px;
+    font-size:12.5px; color:rgba(255,255,255,0.75); line-height:1.5;
+  }
+  .dong-preview b{ color:#fdfaf3; font-family:'Space Grotesk',sans-serif; }
+  .dong-preview .empty{ color:rgba(255,255,255,0.35); }
 
   .empty-state{ text-align:center; padding:26px 10px; color:var(--ink-dim); font-size:13px; }
 
@@ -208,6 +217,8 @@
       <select id="f-floor"></select>
     </div>
 
+    <div id="dong-preview" class="dong-preview"></div>
+
     <div class="field">
       <label>수량 입력 (0개는 자동으로 무시됩니다)</label>
       <div class="item-grid" id="item-grid"></div>
@@ -216,6 +227,11 @@
     <div class="field" id="zone-field">
       <label for="f-zonefloor">전용망 위치 (해당 동에 있는 경우만 선택)</label>
       <select id="f-zonefloor"><option value="">선택 안 함</option></select>
+    </div>
+
+    <div class="field">
+      <label for="f-note">비고 (직접 입력, 선택사항)</label>
+      <input type="text" id="f-note" placeholder="예: 창고 보관, 파손분 교체 등">
     </div>
 
     <button class="addbtn" id="add-btn">+ 자재 현황 목록에 추가</button>
@@ -230,8 +246,6 @@
       </span>
     </p>
     <div class="last-sync" id="last-sync">불러오는 중…</div>
-
-    <div id="item-summary" class="item-summary" style="display:none;"></div>
 
     <div id="loc-list">
       <div class="empty-state">아직 등록된 자재가 없습니다.</div>
@@ -249,16 +263,49 @@ const JSONBIN_API_KEY = '$2a$10$qyZUUO.S8EXC9KuX2iE1QutrHwoBmtfockunTzmY4ZsHTN2V
 const JSONBIN_BASE = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
 const CONSTRUCTION_BASE = `https://api.jsonbin.io/v3/b/${CONSTRUCTION_BIN_ID}`;
 
-const MATERIAL_ITEMS = [
+const BASE_ITEMS_NO_LIVING = [
   { name: '세대망',   unit: '층', step: 1,  max: 10 },
-  { name: '거실창',   unit: '장', step: 1,  max: 10 },
+  // 거실창은 동에 따라 아래에서 동적으로 끼워넣음
   { name: '실외기창', unit: '장', step: 1,  max: 10 },
   { name: '다용도실', unit: '층', step: 1,  max: 10 },
   { name: 'D링',      unit: '개', step: 10, max: 200 },
   { name: '스크류볼트', unit: '개', step: 50, max: 500 },
   { name: '라쳇',     unit: '개', step: 1,  max: 100 },
-  { name: 'EV망',     unit: '층', multiFloor: true }
+  { name: 'EV망',     unit: '층', multiFloor: true },
+  { name: '연창',     unit: '층', multiFloor: true }
 ];
+
+// 202·203동 / 204·205동은 거실창을 세대 타입별로 두 칸으로 나눠서 입력
+function getLivingRoomItems(dong){
+  if(dong === '202' || dong === '203'){
+    return [
+      { name: '거실창(1,4호 115A)', unit: '장', step: 1, max: 10 },
+      { name: '거실창(2,3호 116B)', unit: '장', step: 1, max: 10 }
+    ];
+  }
+  if(dong === '204' || dong === '205'){
+    return [
+      { name: '거실창(1,4호 139A)', unit: '장', step: 1, max: 10 },
+      { name: '거실창(2,3호 141B)', unit: '장', step: 1, max: 10 }
+    ];
+  }
+  return [ { name: '거실창', unit: '장', step: 1, max: 10 } ];
+}
+
+function getItemsForDong(dong){
+  const items = [...BASE_ITEMS_NO_LIVING];
+  items.splice(1, 0, ...getLivingRoomItems(dong)); // 세대망 다음 자리에 거실창(들) 삽입
+  return items;
+}
+
+// 항목별 총 수량 집계 등에서 단위를 찾기 위한 전체 항목명 -> 단위 매핑 (모든 동 변형 포함)
+const UNIT_LOOKUP = {};
+['202','203','204','205','206'].forEach(d => {
+  getItemsForDong(d).forEach(it => { UNIT_LOOKUP[it.name] = it.unit; });
+});
+
+let MATERIAL_ITEMS = getItemsForDong('201'); // 현재 선택된 동 기준 입력 항목 (동적으로 갱신됨)
+
 const DATA = JSON.parse(document.getElementById('sheet-data').textContent);
 const sheetKeys = Object.keys(DATA);
 const ALL_DONGS = ['201','202','203','204','205','206','207','208','209','210','211','212','213','214','215','216','217'];
@@ -271,20 +318,30 @@ const dateInput = document.getElementById('f-date');
 const dongSel = document.getElementById('f-dong');
 const floorInput = document.getElementById('f-floor');
 const zoneFloorSel = document.getElementById('f-zonefloor');
+const noteInput = document.getElementById('f-note');
 const itemGrid = document.getElementById('item-grid');
 const addBtn = document.getElementById('add-btn');
 const locList = document.getElementById('loc-list');
-const itemSummaryEl = document.getElementById('item-summary');
 const refreshBtn = document.getElementById('refresh-btn');
 const exportBtn = document.getElementById('export-btn');
 const lastSync = document.getElementById('last-sync');
 
 const INNER_WALL_DONGS = new Set(['201','202','203','204','205','209','210','211']);
+const DONG_COMPAT = {
+  '201': '213동 호환',
+  '202': '203동 호환',
+  '203': '202동 호환',
+  '204': '205동 호환',
+  '205': '204동 호환',
+  '213': '201동 호환',
+  '214': '84A 2세대, 84C 2세대'
+};
 
 function populateDongs(){
   dongSel.innerHTML = ALL_DONGS.map(d => {
     const wallType = INNER_WALL_DONGS.has(d) ? '내벽' : '맞벽';
-    return `<option value="${d}">${d}동(${wallType})</option>`;
+    const compat = DONG_COMPAT[d] ? `, ${DONG_COMPAT[d]}` : '';
+    return `<option value="${d}">${d}동(${wallType}${compat})</option>`;
   }).join('');
 }
 
@@ -312,11 +369,54 @@ function populateZoneFloors(floors){
     floors.map(f => `<option value="${f}">${f}층</option>`).join('');
 }
 
+// 동을 선택하면 그 동의 가장 최근 등록 날짜와 내용을 바로 보여줌
+function renderDongPreview(){
+  const previewEl = document.getElementById('dong-preview');
+  const dong = dongSel.value;
+
+  // 최근 시공(설치) 정보
+  const mostRecentInstall = getMostRecentInstall(dong);
+  const installHtml = mostRecentInstall
+    ? `<b>최근 설치</b>: ${mostRecentInstall.floor}층 (${mdLabel(mostRecentInstall.date)} 설치)`
+    : `<span class="empty">최근 설치 기록 없음</span>`;
+
+  const dongMaterials = materials.filter(m => m.dong === dong);
+
+  if(dongMaterials.length === 0){
+    previewEl.innerHTML = `${installHtml}<br><span class="empty">${dong}동에 등록된 자재 내역이 아직 없습니다.</span>`;
+    return;
+  }
+
+  let latestDate = '';
+  dongMaterials.forEach(m => { if((m.date||'') > latestDate) latestDate = m.date||''; });
+  const latestEntries = dongMaterials.filter(m => (m.date||'') === latestDate);
+
+  const byFloor = {};
+  latestEntries.forEach(m => {
+    if(!byFloor[m.floor]) byFloor[m.floor] = [];
+    byFloor[m.floor].push(m);
+  });
+  const floorsSorted = Object.keys(byFloor).sort((a,b)=>Number(b)-Number(a));
+  const lines = floorsSorted.map(f => {
+    const items = byFloor[f].map(m => `${m.item} ${m.isLocation ? '위치' : m.qty + (UNIT_LOOKUP[m.item] || '개')}`).join(', ');
+    return `${f}층 — ${items}`;
+  }).join('<br>');
+
+  previewEl.innerHTML = `${installHtml}<br><br><b>${mdLabel(latestDate)} 자재 최근 등록</b><br>${lines}`;
+}
+
 // 계산기와 동일한 규칙: 실제 시공 날짜 기준으로 가장 최근 설치층 + 1층을 추천
 function getSuggestedNextFloor(dong){
+  const mostRecent = getMostRecentInstall(dong);
+  if(!mostRecent) return null;
+  return String(Number(mostRecent.floor) + 1);
+}
+
+// 해당 동에서 가장 최근에 시공(설치)된 층과 날짜를 반환 (날짜 기준, 자재현황 미리보기용)
+function getMostRecentInstall(dong){
   const candidates = constructionEntries.filter(e => e.type === 'install' && e.dong === dong);
   if(candidates.length === 0) return null;
-  const mostRecent = candidates.reduce((best, cur) => {
+  return candidates.reduce((best, cur) => {
     if(!best) return cur;
     const curDate = cur.date || '';
     const bestDate = best.date || '';
@@ -324,7 +424,6 @@ function getSuggestedNextFloor(dong){
     if(curDate === bestDate && Number(cur.floor) > Number(best.floor)) return cur;
     return best;
   }, null);
-  return String(Number(mostRecent.floor) + 1);
 }
 
 function applyFloorSuggestion(){
@@ -335,6 +434,7 @@ function applyFloorSuggestion(){
 }
 
 function populateItemGrid(){
+  MATERIAL_ITEMS = getItemsForDong(dongSel.value);
   itemGrid.innerHTML = MATERIAL_ITEMS.map((it, i) => {
     if(it.multiFloor){
       return `
@@ -385,23 +485,6 @@ function mdLabel(dateStr){
   return dateStr;
 }
 
-function renderItemSummary(){
-  if(materials.length === 0){ itemSummaryEl.style.display = 'none'; itemSummaryEl.innerHTML=''; return; }
-  const totals = {};
-  MATERIAL_ITEMS.forEach(it => totals[it.name] = 0);
-  let zoneCount = 0;
-  materials.forEach(m => {
-    if(m.isLocation){ zoneCount += 1; return; }
-    totals[m.item] = (totals[m.item]||0) + m.qty;
-  });
-  itemSummaryEl.style.display = 'block';
-  itemSummaryEl.innerHTML =
-    `<div class="m-row" style="border-bottom:1px solid #ddd6c3;padding-bottom:8px;margin-bottom:2px;"><span class="name" style="font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.04em;">항목별 총 수량</span></div>` +
-    MATERIAL_ITEMS.filter(it => totals[it.name] > 0).map(it =>
-      `<div class="m-row"><span class="name">${it.name}</span><span class="amt">${totals[it.name].toLocaleString('ko-KR')}${it.unit}</span></div>`
-    ).join('') +
-    (zoneCount > 0 ? `<div class="m-row"><span class="name">전용망 위치 등록</span><span class="amt">${zoneCount.toLocaleString('ko-KR')}곳</span></div>` : '');
-}
 
 function renderLocList(){
   if(materials.length === 0){
@@ -429,7 +512,7 @@ function renderLocList(){
   locList.innerHTML = order.map(key => {
     const g = groups[key];
     const chips = g.rows.map(({m, i}) => {
-      const qtyLabel = m.isLocation ? '위치' : `${m.qty}개`;
+      const qtyLabel = m.isLocation ? '위치' : `${m.qty}${UNIT_LOOKUP[m.item] || '개'}`;
       return `
       <div class="loc-chip">
         <span class="n">${m.item}</span><span class="q">${qtyLabel}</span>
@@ -437,19 +520,23 @@ function renderLocList(){
       </div>
     `;
     }).join('');
+    const notes = [...new Set(g.rows.map(({m}) => m.note).filter(Boolean))];
+    const notesHtml = notes.length > 0
+      ? `<div class="loc-note">📝 ${notes.join(' · ')}</div>` : '';
     return `<div class="loc-group">
       <div class="loc-header">
         <span class="name">${g.dong}동 ${g.floor}층</span>
         <span class="date">${mdLabel(g.latestDate)}</span>
       </div>
       <div class="loc-items">${chips}</div>
+      ${notesHtml}
     </div>`;
   }).join('');
 }
 
 function renderAll(){
-  renderItemSummary();
   renderLocList();
+  renderDongPreview();
 }
 
 async function loadMaterials(showSpin){
@@ -501,6 +588,7 @@ addBtn.addEventListener('click', () => {
   const dong = dongSel.value;
   const floor = floorInput.value;
   if(!floor){ alert('층을 선택해주세요.'); return; }
+  const note = noteInput.value.trim();
 
   const newEntries = [];
   MATERIAL_ITEMS.forEach((it, i) => {
@@ -508,19 +596,25 @@ addBtn.addEventListener('click', () => {
     if(it.multiFloor){
       const selectedFloors = [...input.selectedOptions].map(o => o.value);
       selectedFloors.forEach(f => {
-        newEntries.push({ date, dong, floor: f, item: it.name, qty: 1, isLocation: true });
+        const entry = { date, dong, floor: f, item: it.name, qty: 1 };
+        if(note) entry.note = note;
+        newEntries.push(entry);
       });
       return;
     }
     const qty = Number(input.value) || 0;
     if(qty > 0){
-      newEntries.push({ date, dong, floor, item: it.name, qty });
+      const entry = { date, dong, floor, item: it.name, qty };
+      if(note) entry.note = note;
+      newEntries.push(entry);
     }
   });
 
   const zoneFloor = zoneFloorSel.value;
   if(zoneFloor){
-    newEntries.push({ date, dong, floor: zoneFloor, item: '전용망', qty: 1, isLocation: true });
+    const entry = { date, dong, floor: zoneFloor, item: '전용망', qty: 1, isLocation: true };
+    if(note) entry.note = note;
+    newEntries.push(entry);
   }
 
   if(newEntries.length === 0){ alert('수량을 하나 이상 입력하거나 전용망 위치를 선택해주세요.'); return; }
@@ -539,6 +633,7 @@ addBtn.addEventListener('click', () => {
     }
   });
   zoneFloorSel.value = '';
+  noteInput.value = '';
 });
 
 locList.addEventListener('click', (ev) => {
@@ -556,10 +651,10 @@ refreshBtn.addEventListener('click', () => loadMaterials(true));
 exportBtn.addEventListener('click', () => {
   if(materials.length === 0 || typeof XLSX === 'undefined') return;
   const rows = materials.map(m => ({
-    '날짜': m.date || '', '동': m.dong + '동', '층': m.floor + '층', '항목': m.item, '수량': m.qty
+    '날짜': m.date || '', '동': m.dong + '동', '층': m.floor + '층', '항목': m.item, '수량': m.qty, '비고': m.note || ''
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [ {wch:11}, {wch:7}, {wch:7}, {wch:16}, {wch:8} ];
+  ws['!cols'] = [ {wch:11}, {wch:7}, {wch:7}, {wch:16}, {wch:8}, {wch:24} ];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '자재현황');
   const today = new Date().toISOString().slice(0,10);
@@ -575,6 +670,8 @@ dateInput.value = new Date().toISOString().slice(0,10);
 dongSel.addEventListener('change', () => {
   populateFloors();
   applyFloorSuggestion();
+  renderDongPreview();
+  populateItemGrid(); // 202/203, 204/205동은 거실창이 두 칸으로 바뀜
 });
 
 loadMaterials(false);
