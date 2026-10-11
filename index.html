@@ -817,12 +817,6 @@ async function loadEntries(){
 async function saveEntries(){
   try{
     // 이제 시공 목록 전용 저장소라 다른 데이터와 병합할 필요 없이 바로 저장
-    const payload = JSON.stringify({ entries });
-    const sizeKb = new Blob([payload]).size / 1024;
-    if(sizeKb > 85 && !window.__sizeWarned){
-      window.__sizeWarned = true;
-      alert(`⚠️ 시공 목록 용량이 ${sizeKb.toFixed(1)}KB로 100KB 한도에 가까워지고 있습니다.\n엑셀로 내보내서 백업하신 후, 완료된 예전 항목은 "삭제"로 정리해주시는 것을 권장드려요.`);
-    }
     const putRes = await fetch(JSONBIN_BASE, {
       method: 'PUT',
       cache: 'no-store',
@@ -830,7 +824,7 @@ async function saveEntries(){
         'Content-Type': 'application/json',
         'X-Master-Key': JSONBIN_API_KEY
       },
-      body: payload
+      body: JSON.stringify({ entries })
     });
     if(!putRes.ok){
       const txt = await putRes.text();
